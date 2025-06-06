@@ -1,0 +1,13 @@
+# Ignore Visual Studio files
+.vs/
+*.user
+*.suo
+*.vcxproj.user
+
+# Build outputs
+bin/
+obj/
+
+# Others
+*.log
+*.DS_Store
