@@ -99,7 +99,7 @@ export default function ProfileScreen() {
                 </TouchableOpacity>
               </View>
               <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 6 }}>
-                <TouchableOpacity style={{ backgroundColor: colors.button, borderRadius: 8, paddingVertical: 7, paddingHorizontal: 16, marginRight: 8 }}>
+              <TouchableOpacity style={{ backgroundColor: colors.button, borderRadius: 8, paddingVertical: 7, paddingHorizontal: 16, marginRight: 8 }} onPress={() => router.push('/edit-profile')}>
                   <Text style={{ color: colors.buttonText, fontWeight: 'bold', fontSize: 15 }}>Edit profile</Text>
                 </TouchableOpacity>
                 <TouchableOpacity style={{ backgroundColor: colors.primaryLight, borderRadius: 8, padding: 7, justifyContent: 'center', alignItems: 'center' }} onPress={() => router.push('/settings')}>
