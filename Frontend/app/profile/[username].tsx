@@ -168,6 +168,9 @@ export default function PublicProfileScreen() {
   }
   if (error) return <View style={styles.center}><Text>{error}</Text></View>;
 
+  // After fetching posts for the user, filter out archived posts before rendering
+  const visiblePosts = posts.filter((p) => !p.isArchived);
+
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.background }}>
       {/* Back Button */}

@@ -1,7 +1,7 @@
 import { View, Text, StyleSheet, TouchableOpacity, Switch, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useState } from 'react';
-import { ArrowLeft } from 'lucide-react-native';
+import { ArrowLeft, Calendar, Archive, LogOut } from 'lucide-react-native';
 import { router } from 'expo-router';
 import { useTheme } from '../components/ThemeProvider';
 import { Ionicons } from '@expo/vector-icons';
@@ -37,10 +37,7 @@ export default function SettingsScreen() {
           <TouchableOpacity style={styles.row} onPress={handleChangePassword}>
             <Text style={[styles.rowText, { color: colors.text }]}>Change Password</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.row} onPress={() => {
-            // TODO: Implement archive functionality
-            alert('Archive functionality coming soon!');
-          }}>
+          <TouchableOpacity style={styles.row} onPress={() => router.push('/archive')}>
             <Text style={[styles.rowText, { color: colors.text }]}>Archive</Text>
             <Ionicons name="archive-outline" size={24} color={colors.text} />
           </TouchableOpacity>

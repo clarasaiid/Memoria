@@ -11,7 +11,7 @@ using Microsoft.AspNetCore.Identity;
 namespace Memoria_GDG.Controllers
 {
     [ApiController]
-    [Route("users")]
+    [Route("api/[controller]")]
     public class UsersController : ControllerBase
     {
         private readonly AppDbContext _context;

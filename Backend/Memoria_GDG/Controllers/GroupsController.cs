@@ -11,7 +11,7 @@ using System.Linq;
 namespace Memoria_GDG.Controllers
 {
     [ApiController]
-    [Route("groups")]
+    [Route("api/[controller]")]
     public class GroupsController : ControllerBase
     {
         private readonly AppDbContext _context;

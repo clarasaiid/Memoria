@@ -7,7 +7,7 @@ using System.Collections.Generic;
 namespace Memoria_GDG.Controllers
 {
     [ApiController]
-    [Route("api/notifications")]
+    [Route("api/[controller]")]
     public class NotificationsController : ControllerBase
     {
         private readonly AppDbContext _context;
