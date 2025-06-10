@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { View, Text, StyleSheet, Image, TouchableOpacity, ScrollView, FlatList, Modal, TextInput, useWindowDimensions, ImageBackground, ActivityIndicator, Platform } from 'react-native';
-import { Heart, MessageCircle, Send, Bookmark as BookmarkSimple, MoveHorizontal as MoreHorizontal, ArrowLeft } from 'lucide-react-native';
+import { Heart, MessageCircle, Send, Bookmark as BookmarkSimple, MoreVertical, ArrowLeft, UserPlus, UserCheck, UserMinus } from 'lucide-react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { apiService } from '../services/api';
 import { useTheme } from '../../components/ThemeProvider';
+import MessageButton from '../components/MessageButton';
 
 const COVER_HEIGHT = 220;
 const PROFILE_SIZE = 110;
@@ -30,38 +31,41 @@ export default function PublicProfileScreen() {
   const [isFriend, setIsFriend] = useState(false);
   const [isLoadingAction, setIsLoadingAction] = useState(false);
   const [friendshipId, setFriendshipId] = useState<string | null>(null);
+  const [pendingFriend, setPendingFriend] = useState(false);
+  const [isBlocked, setIsBlocked] = useState(false);
+  const [hasBlocked, setHasBlocked] = useState(false);
   const insets = useSafeAreaInsets();
+  const [currentUser, setCurrentUser] = useState<any>(null);
+  const [moreModal, setMoreModal] = useState(false);
 
-  // Move fetchProfile outside useEffect so it can be called after actions
+  // Fetch profile and relationship
   const fetchProfile = async () => {
     setLoading(true);
     setError('');
     try {
       const res = await apiService.get(`/users/username/${username}`) as any;
       setProfile(res);
-
-      // Fetch followers, following, friends
       const followersRes = await apiService.get(`/users/${res.id}/followers`) as any[];
       setFollowers(followersRes);
       const followingRes = await apiService.get(`/users/${res.id}/following`) as any[];
       setFollowing(followingRes);
       const friendsRes = await apiService.get(`/users/${res.id}/friends`) as any[];
       setFriends(friendsRes);
-
-      // Fetch relationship status
+      // Relationship
       const relationshipRes = await apiService.get(`/users/${res.id}/relationship`) as any;
       setIsFollowing(relationshipRes.isFollowing);
       setIsFriend(relationshipRes.isFriend);
-      // Fetch friendshipId if friends
-      if (relationshipRes.isFriend) {
-        const friendRequests = await apiService.get('/api/friend-requests') as any[];
-        const friendship = friendRequests.find((f: any) =>
-          (f.UserId === res.id || f.FriendId === res.id) && f.Accepted
-        );
-        if (friendship) setFriendshipId(friendship.id);
-      } else {
-        setFriendshipId(null);
-      }
+      setIsBlocked(relationshipRes.isBlocked);
+      setHasBlocked(relationshipRes.hasBlocked);
+      // Pending friend request
+      const requests = await apiService.get('/api/friend-requests') as any[];
+      const pending = requests.some((req: any) => (req.UserId === currentUser?.id && req.FriendId === res.id && !req.Accepted));
+      setPendingFriend(pending);
+      // FriendshipId for removal
+      const friendship = requests.find((f: any) =>
+        ((f.UserId === res.id && f.FriendId === currentUser?.id) || (f.UserId === currentUser?.id && f.FriendId === res.id)) && f.Accepted
+      );
+      setFriendshipId(friendship ? friendship.id : null);
     } catch (e: any) {
       setError('User not found');
       setProfile(null);
@@ -71,9 +75,15 @@ export default function PublicProfileScreen() {
   };
 
   useEffect(() => {
-    if (username) fetchProfile();
-  }, [username]);
+    apiService.get('/auth/me').then((me: any) => setCurrentUser(me.profile));
+  }, []);
 
+  useEffect(() => {
+    if (username && currentUser) fetchProfile();
+    // eslint-disable-next-line
+  }, [username, currentUser]);
+
+  // Unified button handlers
   const handleFollow = async () => {
     if (!profile || isLoadingAction) return;
     setIsLoadingAction(true);
@@ -82,10 +92,10 @@ export default function PublicProfileScreen() {
         await apiService.delete(`/users/${profile.id}/follow`);
         setIsFollowing(false);
       } else {
-        await apiService.post(`/users/${profile.id}/follow`);
+        await apiService.post(`/users/${profile.id}/follow`, {});
         setIsFollowing(true);
       }
-      await fetchProfile(); // update lists
+      await fetchProfile();
     } catch (error) {
       console.error('Error toggling follow:', error);
     } finally {
@@ -97,29 +107,48 @@ export default function PublicProfileScreen() {
     if (!profile || isLoadingAction) return;
     setIsLoadingAction(true);
     try {
-      if (isFriend) {
-        if (friendshipId) {
-          await apiService.delete(`/api/friend-requests/${friendshipId}`);
-          setIsFriend(false);
-          setFriendshipId(null);
-        }
-      } else {
+      if (isFriend && friendshipId) {
+        await apiService.delete(`/api/friend-requests/${friendshipId}`);
+        setIsFriend(false);
+        setFriendshipId(null);
+      } else if (!isFriend && !pendingFriend) {
         const me = await apiService.get('/auth/me') as any;
-        const resp = await apiService.post('/api/friend-requests', {
+        await apiService.post('/api/friend-requests', {
           UserId: me.profile.id,
           FriendId: profile.id,
           Accepted: false
-        }) as any;
-        setIsFriend(true);
-        setFriendshipId(resp.id);
+        });
+        setPendingFriend(true);
       }
-      await fetchProfile(); // update lists
+      await fetchProfile();
     } catch (error) {
       console.error('Error toggling friend:', error);
     } finally {
       setIsLoadingAction(false);
     }
   };
+
+  const handleBlock = async () => {
+    if (!profile) return;
+    setIsLoadingAction(true);
+    try {
+      if (hasBlocked) {
+        await apiService.delete(`/users/${profile.id}/block`);
+        setHasBlocked(false);
+      } else {
+        await apiService.post(`/users/${profile.id}/block`, {});
+        setHasBlocked(true);
+      }
+      setMoreModal(false);
+      await fetchProfile();
+    } catch (error) {
+      console.error('Error blocking/unblocking user:', error);
+    } finally {
+      setIsLoadingAction(false);
+    }
+  };
+
+  const isOwnProfile = currentUser && profile && currentUser.id === profile.id;
 
   const getListData = () => {
     let data: any[] = [];
@@ -148,7 +177,31 @@ export default function PublicProfileScreen() {
       >
         <ArrowLeft size={24} color={colors.text} />
       </TouchableOpacity>
-
+      {/* More (3 dots) Button */}
+      {!isOwnProfile && (
+        <TouchableOpacity
+          onPress={() => setMoreModal(true)}
+          style={{ position: 'absolute', top: 20, right: 20, zIndex: 1001, padding: 10, backgroundColor: isDark ? 'rgba(0,0,0,0.5)' : 'rgba(255,255,255,0.5)', borderRadius: 20 }}
+        >
+          <MoreVertical size={24} color={colors.text} />
+        </TouchableOpacity>
+      )}
+      {/* More Modal */}
+      <Modal visible={moreModal} transparent animationType="fade">
+        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.3)', justifyContent: 'flex-end' }}>
+          <View style={{ backgroundColor: colors.card, borderTopLeftRadius: 16, borderTopRightRadius: 16, padding: 24 }}>
+            <TouchableOpacity onPress={handleBlock} style={{ paddingVertical: 12 }}>
+              <Text style={{ color: hasBlocked ? colors.primary : colors.error, fontWeight: 'bold', fontSize: 16 }}>{hasBlocked ? 'Unblock User' : 'Block User'}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => { setMoreModal(false); router.push({ pathname: '/conversation/[id]', params: { id: profile.id, username: profile.username } }); }} style={{ paddingVertical: 12 }}>
+              <Text style={{ color: colors.primary, fontWeight: 'bold', fontSize: 16 }}>Message</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => setMoreModal(false)} style={{ paddingVertical: 12 }}>
+              <Text style={{ color: colors.text, fontSize: 16 }}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
       <ScrollView style={{ flex: 1, backgroundColor: colors.background }} contentContainerStyle={{ paddingBottom: Platform.OS === 'web' ? 120 : insets.bottom + 80 }}>
         {/* Cover Photo as background */}
         <ImageBackground source={{ uri: profile.coverPhotoUrl || fallbackCover }} style={{ width: '100%', minHeight: COVER_HEIGHT + 60, paddingBottom: 16, justifyContent: 'flex-end' }}>
@@ -167,45 +220,51 @@ export default function PublicProfileScreen() {
                   <Text style={{ color: colors.primary, fontSize: 15, backgroundColor: isDark ? 'rgba(74,144,226,0.15)' : 'rgba(70,130,180,0.08)', borderRadius: 8, paddingHorizontal: 8, paddingVertical: 2, marginRight: 8 }}>{friends.length} friends</Text>
                 </TouchableOpacity>
               </View>
-              <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 6 }}>
-                <TouchableOpacity 
-                  style={[
-                    styles.actionButton,
-                    { 
-                      backgroundColor: isFollowing ? colors.primaryLight : colors.primary,
-                      marginRight: 8
-                    }
-                  ]}
-                  onPress={handleFollow}
-                  disabled={isLoadingAction}
-                >
-                  <Text style={{ 
-                    color: isFollowing ? colors.text : colors.buttonText,
-                    fontWeight: 'bold',
-                    fontSize: 15
-                  }}>
-                    {isFollowing ? 'Unfollow' : 'Follow'}
+              {/* Unified action buttons */}
+              {!isOwnProfile && !isBlocked && !hasBlocked && (
+                <View style={{ flexDirection: 'row', gap: 12, marginTop: 16 }}>
+                  {/* Follow/Unfollow */}
+                  <TouchableOpacity
+                    style={[
+                      styles.actionButton,
+                      { backgroundColor: isFollowing ? colors.primaryLight : colors.primary }
+                    ]}
+                    onPress={handleFollow}
+                    disabled={isLoadingAction}
+                  >
+                    {isFollowing ? <UserCheck color={colors.buttonText} size={20} /> : <UserPlus color={colors.buttonText} size={20} />}
+                    <Text style={{ color: isFollowing ? colors.text : colors.buttonText, fontWeight: 'bold', fontSize: 15, marginLeft: 6 }}>
+                      {isFollowing ? 'Unfollow' : 'Follow'}
+                    </Text>
+                  </TouchableOpacity>
+                  {/* Add Friend/Remove Friend/Pending/Friends */}
+                  <TouchableOpacity
+                    style={[
+                      styles.actionButton,
+                      { backgroundColor: isFriend ? colors.success : pendingFriend ? colors.warning : colors.primary }
+                    ]}
+                    onPress={handleFriend}
+                    disabled={isLoadingAction || pendingFriend}
+                  >
+                    {isFriend ? <UserCheck color={colors.buttonText} size={20} /> : pendingFriend ? <UserMinus color={colors.buttonText} size={20} /> : <UserPlus color={colors.buttonText} size={20} />}
+                    <Text style={{ color: isFriend || pendingFriend ? colors.buttonText : colors.buttonText, fontWeight: 'bold', fontSize: 15, marginLeft: 6 }}>
+                      {isFriend ? 'Remove Friend' : pendingFriend ? 'Pending' : 'Add Friend'}
+                    </Text>
+                  </TouchableOpacity>
+                  {/* Message button only if friends */}
+                  {isFriend && (
+                    <MessageButton targetUserId={profile.id} targetUsername={profile.username} />
+                  )}
+                </View>
+              )}
+              {/* Blocked message */}
+              {!isOwnProfile && (isBlocked || hasBlocked) && (
+                <View style={{ marginTop: 16 }}>
+                  <Text style={{ color: colors.error, fontWeight: 'bold' }}>
+                    {hasBlocked ? 'You have blocked this user.' : 'You are blocked by this user.'}
                   </Text>
-                </TouchableOpacity>
-                <TouchableOpacity 
-                  style={[
-                    styles.actionButton,
-                    { 
-                      backgroundColor: isFriend ? colors.primaryLight : colors.primary,
-                    }
-                  ]}
-                  onPress={handleFriend}
-                  disabled={isLoadingAction}
-                >
-                  <Text style={{ 
-                    color: isFriend ? colors.text : colors.buttonText,
-                    fontWeight: 'bold',
-                    fontSize: 15
-                  }}>
-                    {isFriend ? 'Unfriend' : 'Add Friend'}
-                  </Text>
-                </TouchableOpacity>
-              </View>
+                </View>
+              )}
             </View>
           </View>
           {/* Stats Row */}

@@ -37,15 +37,37 @@ namespace Memoria_GDG.Controllers
         [HttpPost]
         public async Task<ActionResult<Friendship>> CreateFriendship([FromBody] CreateFriendshipDto dto)
         {
+            // Check if friendship already exists
+            var existingFriendship = await _context.Friendships
+                .FirstOrDefaultAsync(f => (f.UserId == dto.UserId && f.FriendId == dto.FriendId) ||
+                                        (f.UserId == dto.FriendId && f.FriendId == dto.UserId));
+            
+            if (existingFriendship != null)
+            {
+                return BadRequest("Friendship request already exists");
+            }
+
             var friendship = new Friendship
             {
                 UserId = dto.UserId,
                 FriendId = dto.FriendId,
-                Accepted = dto.Accepted,
+                Accepted = false,
                 Status = "pending"
             };
             _context.Friendships.Add(friendship);
             await _context.SaveChangesAsync();
+
+            // Create notification for the friend request
+            var notification = new Notification
+            {
+                Type = "friend_request",
+                Source = "user",
+                UserId = dto.FriendId,
+                PostId = friendship.Id // Using PostId to store the friendship ID
+            };
+            _context.Notifications.Add(notification);
+            await _context.SaveChangesAsync();
+
             return CreatedAtAction(nameof(GetFriendship), new { id = friendship.Id }, friendship);
         }
 
@@ -61,7 +83,10 @@ namespace Memoria_GDG.Controllers
             if (friendship == null) return NotFound();
 
             // Remove notification for this friend request
-            var notification = await _context.Notifications.FirstOrDefaultAsync(n => n.Type == "friend_request" && n.UserId == friendship.FriendId && n.PostId == id);
+            var notification = await _context.Notifications
+                .FirstOrDefaultAsync(n => n.Type == "friend_request" && 
+                                        n.UserId == friendship.FriendId && 
+                                        n.PostId == id);
             if (notification != null)
             {
                 _context.Notifications.Remove(notification);
@@ -69,13 +94,21 @@ namespace Memoria_GDG.Controllers
 
             if (accept)
             {
-                // Mark as accepted (if you have a status field, set it; otherwise, just keep the friendship)
-                // Example: friendship.Status = "Accepted";
-                // If you don't have a status, just keep the record
+                friendship.Accepted = true;
+                friendship.Status = "accepted";
+
+                // Create a notification for the sender that their request was accepted
+                var acceptanceNotification = new Notification
+                {
+                    Type = "friend_request_accepted",
+                    Source = "user",
+                    UserId = friendship.UserId,
+                    PostId = friendship.FriendId // Using PostId to store the friend's ID
+                };
+                _context.Notifications.Add(acceptanceNotification);
             }
             else
             {
-                // Remove the friendship (reject)
                 _context.Friendships.Remove(friendship);
             }
 

@@ -51,18 +51,16 @@ export default function ProfileDetailsScreen() {
       });
       // Fetch the current user info to get the username
       const me = await apiService.get('/auth/me');
-      setMessage('Profile details saved! Redirecting...');
-      setMessageType('success');
-      setTimeout(() => {
-        setMessage('');
-        setMessageType('');
-        router.replace('/(tabs)/profile');
-      }, 2000);
+      router.replace('/(tabs)/profile');
     } catch (error) {
       setMessage('Failed to save profile details. Please try again.');
       setMessageType('error');
       setTimeout(() => setMessage(''), 4000);
     }
+  };
+
+  const handleSkip = () => {
+    router.replace('/(tabs)/profile');
   };
 
   const styles = StyleSheet.create({
@@ -135,7 +133,7 @@ export default function ProfileDetailsScreen() {
             <TouchableOpacity style={styles.continueButton} onPress={handleProfileDetails}>
               <Text style={styles.continueButtonText}>Save and Continue</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.continueButton} onPress={() => router.replace('/login')}>
+            <TouchableOpacity style={styles.continueButton} onPress={handleSkip}>
               <Text style={styles.continueButtonText}>Skip</Text>
             </TouchableOpacity>
           </View>
