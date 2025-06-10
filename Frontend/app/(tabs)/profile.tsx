@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, Image, TouchableOpacity, ScrollView, FlatList, 
 import { Settings, Grid, List, Heart, MessageCircle, Send, Bookmark as BookmarkSimple, MoveHorizontal as MoreHorizontal } from 'lucide-react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { apiService } from '../services/api';
-import { router } from 'expo-router';
+import { router, useRouter } from 'expo-router';
 import { useTheme } from '../../components/ThemeProvider';
 
 const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
@@ -25,6 +25,7 @@ export default function ProfileScreen() {
   const [friends, setFriends] = useState<any[]>([]);
   const [followers, setFollowers] = useState<any[]>([]);
   const [following, setFollowing] = useState<any[]>([]);
+  const router = useRouter();
 
   useEffect(() => {
     const fetchProfile = async () => {
@@ -99,7 +100,9 @@ export default function ProfileScreen() {
                 </TouchableOpacity>
               </View>
               <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 6 }}>
-              <TouchableOpacity style={{ backgroundColor: colors.button, borderRadius: 8, paddingVertical: 7, paddingHorizontal: 16, marginRight: 8 }} onPress={() => router.push('/edit-profile')}>
+
+                <TouchableOpacity style={{ backgroundColor: colors.button, borderRadius: 8, paddingVertical: 7, paddingHorizontal: 16, marginRight: 8 }} onPress={() => router.push('/edit-profile')}>
+
                   <Text style={{ color: colors.buttonText, fontWeight: 'bold', fontSize: 15 }}>Edit profile</Text>
                 </TouchableOpacity>
                 <TouchableOpacity style={{ backgroundColor: colors.primaryLight, borderRadius: 8, padding: 7, justifyContent: 'center', alignItems: 'center' }} onPress={() => router.push('/settings')}>
@@ -110,18 +113,18 @@ export default function ProfileScreen() {
           </View>
           {/* Stats Row */}
           <View style={{ flexDirection: 'row', justifyContent: 'flex-start', alignItems: 'center', marginLeft: 16, marginTop: 10, zIndex: 2 }}>
-            <TouchableOpacity style={{ alignItems: 'flex-start', marginRight: 24 }} onPress={() => setListModal({ visible: true, type: 'Following', data: [] })}>
+            <TouchableOpacity style={{ alignItems: 'flex-start', marginRight: 24 }} onPress={() => setListModal({ visible: true, type: 'Following', data: following })}>
               <Text style={{ color: colors.text, fontWeight: 'bold', fontSize: 16 }}>{following.length}</Text>
               <Text style={{ color: colors.textSecondary, fontSize: 13, opacity: 0.7 }}>Following</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={{ alignItems: 'flex-start', marginRight: 24 }} onPress={() => setListModal({ visible: true, type: 'Followers', data: [] })}>
+            <TouchableOpacity style={{ alignItems: 'flex-start', marginRight: 24 }} onPress={() => setListModal({ visible: true, type: 'Followers', data: followers })}>
               <Text style={{ color: colors.text, fontWeight: 'bold', fontSize: 16 }}>{followers.length}</Text>
               <Text style={{ color: colors.textSecondary, fontSize: 13, opacity: 0.7 }}>Followers</Text>
             </TouchableOpacity>
-            <View style={{ alignItems: 'flex-start', marginRight: 24 }}>
-              <Text style={{ color: colors.text, fontWeight: 'bold', fontSize: 16 }}>{posts.length}</Text>
-              <Text style={{ color: colors.textSecondary, fontSize: 13, opacity: 0.7 }}>Posts</Text>
-            </View>
+            <TouchableOpacity style={{ alignItems: 'flex-start', marginRight: 24 }} onPress={() => setListModal({ visible: true, type: 'Friends', data: friends })}>
+              <Text style={{ color: colors.text, fontWeight: 'bold', fontSize: 16 }}>{friends.length}</Text>
+              <Text style={{ color: colors.textSecondary, fontSize: 13, opacity: 0.7 }}>Friends</Text>
+            </TouchableOpacity>
           </View>
           {/* Bio */}
           <Text style={{ color: '#fff', fontSize: 15, marginLeft: 16, marginTop: 7, marginBottom: 14, zIndex: 2 }}>{profile.bio || 'No bio yet.'}</Text>
@@ -220,13 +223,20 @@ export default function ProfileScreen() {
               placeholderTextColor={colors.textSecondary}
             />
             <FlatList
-              data={getListData()}
-              keyExtractor={item => item.id.toString()}
+              data={listModal.data.filter((u: any) => u.name?.toLowerCase().startsWith(search.toLowerCase()) || u.username?.toLowerCase().startsWith(search.toLowerCase()))}
+              keyExtractor={item => (item.id !== undefined && item.id !== null ? item.id.toString() : Math.random().toString())}
               renderItem={({ item }) => (
-                <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 10 }}>
+                <TouchableOpacity
+                  onPress={() => {
+                    setListModal({ visible: false, type: '', data: [] });
+                    setSearch('');
+                    router.push(`/profile/${item.username}`);
+                  }}
+                  style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 10 }}
+                >
                   <Image source={{ uri: item.profilePictureUrl }} style={{ width: 40, height: 40, borderRadius: 20, marginRight: 10 }} />
                   <Text style={{ fontSize: 16, color: colors.text }}>{item.name || item.username}</Text>
-                </View>
+                </TouchableOpacity>
               )}
             />
             <TouchableOpacity style={{ backgroundColor: colors.primary, padding: 10, borderRadius: 8, alignItems: 'center', marginTop: 10 }} onPress={() => { setListModal({ visible: false, type: '', data: [] }); setSearch(''); }}>

@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { View, Text, StyleSheet, Image, TouchableOpacity, ScrollView, FlatList, Modal, TextInput, useWindowDimensions, ImageBackground, ActivityIndicator, Platform } from 'react-native';
 import { Heart, MessageCircle, Send, Bookmark as BookmarkSimple, MoveHorizontal as MoreHorizontal, ArrowLeft } from 'lucide-react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { apiService } from '../services/api';
 import { useTheme } from '../../components/ThemeProvider';
 
@@ -30,36 +30,47 @@ export default function PublicProfileScreen() {
   const [isFriend, setIsFriend] = useState(false);
   const [isLoadingAction, setIsLoadingAction] = useState(false);
   const [friendshipId, setFriendshipId] = useState<string | null>(null);
+  const insets = useSafeAreaInsets();
+
+  // Move fetchProfile outside useEffect so it can be called after actions
+  const fetchProfile = async () => {
+    setLoading(true);
+    setError('');
+    try {
+      const res = await apiService.get(`/users/username/${username}`) as any;
+      setProfile(res);
+
+      // Fetch followers, following, friends
+      const followersRes = await apiService.get(`/users/${res.id}/followers`) as any[];
+      setFollowers(followersRes);
+      const followingRes = await apiService.get(`/users/${res.id}/following`) as any[];
+      setFollowing(followingRes);
+      const friendsRes = await apiService.get(`/users/${res.id}/friends`) as any[];
+      setFriends(friendsRes);
+
+      // Fetch relationship status
+      const relationshipRes = await apiService.get(`/users/${res.id}/relationship`) as any;
+      setIsFollowing(relationshipRes.isFollowing);
+      setIsFriend(relationshipRes.isFriend);
+      // Fetch friendshipId if friends
+      if (relationshipRes.isFriend) {
+        const friendRequests = await apiService.get('/api/friend-requests') as any[];
+        const friendship = friendRequests.find((f: any) =>
+          (f.UserId === res.id || f.FriendId === res.id) && f.Accepted
+        );
+        if (friendship) setFriendshipId(friendship.id);
+      } else {
+        setFriendshipId(null);
+      }
+    } catch (e: any) {
+      setError('User not found');
+      setProfile(null);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    const fetchProfile = async () => {
-      setLoading(true);
-      setError('');
-      try {
-        const res = await apiService.get(`/users/username/${username}`) as any;
-        setProfile(res);
-        // Fetch relationship status
-        const relationshipRes = await apiService.get(`/users/${res.id}/relationship`) as any;
-        setIsFollowing(relationshipRes.isFollowing);
-        setIsFriend(relationshipRes.isFriend);
-        // Fetch friendshipId if friends
-        if (relationshipRes.isFriend) {
-          // Fetch all friend-requests and find the one with this user
-          const friendRequests = await apiService.get('/api/friend-requests') as any[];
-          const friendship = friendRequests.find((f: any) =>
-            (f.UserId === res.id || f.FriendId === res.id) && f.Accepted
-          );
-          if (friendship) setFriendshipId(friendship.id);
-        } else {
-          setFriendshipId(null);
-        }
-      } catch (e: any) {
-        setError('User not found');
-        setProfile(null);
-      } finally {
-        setLoading(false);
-      }
-    };
     if (username) fetchProfile();
   }, [username]);
 
@@ -74,6 +85,7 @@ export default function PublicProfileScreen() {
         await apiService.post(`/users/${profile.id}/follow`);
         setIsFollowing(true);
       }
+      await fetchProfile(); // update lists
     } catch (error) {
       console.error('Error toggling follow:', error);
     } finally {
@@ -92,7 +104,6 @@ export default function PublicProfileScreen() {
           setFriendshipId(null);
         }
       } else {
-        // You may need to get current user id from auth context or profile
         const me = await apiService.get('/auth/me') as any;
         const resp = await apiService.post('/api/friend-requests', {
           UserId: me.profile.id,
@@ -102,6 +113,7 @@ export default function PublicProfileScreen() {
         setIsFriend(true);
         setFriendshipId(resp.id);
       }
+      await fetchProfile(); // update lists
     } catch (error) {
       console.error('Error toggling friend:', error);
     } finally {
@@ -137,7 +149,7 @@ export default function PublicProfileScreen() {
         <ArrowLeft size={24} color={colors.text} />
       </TouchableOpacity>
 
-      <ScrollView style={{ flex: 1, backgroundColor: colors.background }} contentContainerStyle={{ paddingBottom: 100 }}>
+      <ScrollView style={{ flex: 1, backgroundColor: colors.background }} contentContainerStyle={{ paddingBottom: Platform.OS === 'web' ? 120 : insets.bottom + 80 }}>
         {/* Cover Photo as background */}
         <ImageBackground source={{ uri: profile.coverPhotoUrl || fallbackCover }} style={{ width: '100%', minHeight: COVER_HEIGHT + 60, paddingBottom: 16, justifyContent: 'flex-end' }}>
           <View style={{ ...StyleSheet.absoluteFillObject, backgroundColor: isDark ? 'rgba(24,26,32,0.7)' : 'rgba(255,255,255,0.7)', zIndex: 1 }} />
@@ -251,10 +263,17 @@ export default function PublicProfileScreen() {
               data={getListData()}
               keyExtractor={item => (item.id !== undefined && item.id !== null ? item.id.toString() : Math.random().toString())}
               renderItem={({ item }) => (
-                <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 10 }}>
+                <TouchableOpacity
+                  onPress={() => {
+                    setListModal({ visible: false, type: '', data: [] });
+                    setSearch('');
+                    router.push(`/profile/${item.username}`);
+                  }}
+                  style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 10 }}
+                >
                   <Image source={{ uri: item.profilePictureUrl }} style={{ width: 40, height: 40, borderRadius: 20, marginRight: 10 }} />
                   <Text style={{ fontSize: 16, color: colors.text }}>{item.name || item.username}</Text>
-                </View>
+                </TouchableOpacity>
               )}
             />
             <TouchableOpacity style={{ backgroundColor: colors.primary, padding: 10, borderRadius: 8, alignItems: 'center', marginTop: 10 }} onPress={() => { setListModal({ visible: false, type: '', data: [] }); setSearch(''); }}>
