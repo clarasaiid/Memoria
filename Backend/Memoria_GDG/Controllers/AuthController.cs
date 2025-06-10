@@ -322,55 +322,69 @@ namespace Memoria_GDG.Controllers
         [Authorize]
         public async Task<IActionResult> GetMe()
         {
-            var userId = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
-            if (string.IsNullOrEmpty(userId))
-                return Unauthorized();
-            var user = await _userManager.FindByIdAsync(userId);
-            if (user == null)
-                return Unauthorized();
+            var userId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier));
+            var user = await _db.Users.FindAsync(userId);
 
-            // Fetch posts
-            var posts = await _db.Posts.Where(p => p.UserId == user.Id).ToListAsync();
-            // Fetch friends (bidirectional)
+            // Followers: users who follow me
+            var followers = await _db.Follows
+                .Where(f => f.FollowingId == userId)
+                .Select(f => f.Follower)
+                .Select(u => new {
+                    id = u.Id,
+                    username = u.UserName,
+                    firstName = u.FirstName,
+                    lastName = u.LastName,
+                    bio = u.Bio,
+                    profilePictureUrl = u.ProfilePictureUrl,
+                    coverPhotoUrl = u.CoverPhotoUrl
+                })
+                .ToListAsync();
+
+            // Following: users I follow
+            var following = await _db.Follows
+                .Where(f => f.FollowerId == userId)
+                .Select(f => f.Following)
+                .Select(u => new {
+                    id = u.Id,
+                    username = u.UserName,
+                    firstName = u.FirstName,
+                    lastName = u.LastName,
+                    bio = u.Bio,
+                    profilePictureUrl = u.ProfilePictureUrl,
+                    coverPhotoUrl = u.CoverPhotoUrl
+                })
+                .ToListAsync();
+
+            // Friends: bidirectional, accepted
             var friends = await _db.Friendships
-                .Where(f => (f.UserId == user.Id || f.FriendId == user.Id) && f.Accepted)
-                .Select(f => f.UserId == user.Id ? f.Friend : f.User)
-                .Select(u => new { u.Id, u.UserName, u.ProfilePictureUrl, Name = u.FirstName + " " + u.LastName })
-                .ToListAsync();
-            // Followers: users who follow this user
-            var followers = await _db.Friendships
-                .Where(f => f.FriendId == user.Id && f.Accepted)
-                .Select(f => f.User)
-                .Select(u => new { u.Id, u.UserName, u.ProfilePictureUrl, Name = u.FirstName + " " + u.LastName })
-                .ToListAsync();
-            // Following: users this user follows
-            var following = await _db.Friendships
-                .Where(f => f.UserId == user.Id && f.Accepted)
-                .Select(f => f.Friend)
-                .Select(u => new { u.Id, u.UserName, u.ProfilePictureUrl, Name = u.FirstName + " " + u.LastName })
+                .Where(f => (f.UserId == userId || f.FriendId == userId) && f.Accepted)
+                .Select(f => f.UserId == userId ? f.Friend : f.User)
+                .Select(u => new {
+                    id = u.Id,
+                    username = u.UserName,
+                    firstName = u.FirstName,
+                    lastName = u.LastName,
+                    bio = u.Bio,
+                    profilePictureUrl = u.ProfilePictureUrl,
+                    coverPhotoUrl = u.CoverPhotoUrl
+                })
                 .ToListAsync();
 
-            var profile = new
-            {
-                id = user.Id,
-                username = user.UserName,
-                name = user.FirstName + " " + user.LastName,
-                firstName = user.FirstName,
-                lastName = user.LastName,
-                email = user.Email,
-                bio = user.Bio,
-                profilePictureUrl = user.ProfilePictureUrl,
-                coverPhotoUrl = user.CoverPhotoUrl,
-                birthday = user.Birthday,
-                gender = user.Gender
-            };
-            return Ok(new
-            {
-                profile,
-                posts,
-                friends,
+            return Ok(new {
+                profile = new {
+                    id = user.Id,
+                    username = user.UserName,
+                    firstName = user.FirstName,
+                    lastName = user.LastName,
+                    bio = user.Bio,
+                    profilePictureUrl = user.ProfilePictureUrl,
+                    coverPhotoUrl = user.CoverPhotoUrl,
+                    birthday = user.Birthday,
+                    gender = user.Gender
+                },
                 followers,
-                following
+                following,
+                friends
             });
         }
     }

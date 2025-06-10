@@ -224,5 +224,65 @@ namespace Memoria_GDG.Controllers
             await _context.SaveChangesAsync();
             return NoContent();
         }
+
+        // GET /users/{id}/followers
+        [HttpGet("{id}/followers")]
+        public async Task<IActionResult> GetFollowers(int id)
+        {
+            var followers = await _context.Follows
+                .Where(f => f.FollowingId == id)
+                .Select(f => f.Follower)
+                .Select(u => new {
+                    id = u.Id,
+                    username = u.UserName,
+                    firstName = u.FirstName,
+                    lastName = u.LastName,
+                    bio = u.Bio,
+                    profilePictureUrl = u.ProfilePictureUrl,
+                    coverPhotoUrl = u.CoverPhotoUrl
+                })
+                .ToListAsync();
+            return Ok(followers);
+        }
+
+        // GET /users/{id}/following
+        [HttpGet("{id}/following")]
+        public async Task<IActionResult> GetFollowing(int id)
+        {
+            var following = await _context.Follows
+                .Where(f => f.FollowerId == id)
+                .Select(f => f.Following)
+                .Select(u => new {
+                    id = u.Id,
+                    username = u.UserName,
+                    firstName = u.FirstName,
+                    lastName = u.LastName,
+                    bio = u.Bio,
+                    profilePictureUrl = u.ProfilePictureUrl,
+                    coverPhotoUrl = u.CoverPhotoUrl
+                })
+                .ToListAsync();
+            return Ok(following);
+        }
+
+        // GET /users/{id}/friends
+        [HttpGet("{id}/friends")]
+        public async Task<IActionResult> GetFriends(int id)
+        {
+            var friends = await _context.Friendships
+                .Where(f => (f.UserId == id || f.FriendId == id) && f.Accepted)
+                .Select(f => f.UserId == id ? f.Friend : f.User)
+                .Select(u => new {
+                    id = u.Id,
+                    username = u.UserName,
+                    firstName = u.FirstName,
+                    lastName = u.LastName,
+                    bio = u.Bio,
+                    profilePictureUrl = u.ProfilePictureUrl,
+                    coverPhotoUrl = u.CoverPhotoUrl
+                })
+                .ToListAsync();
+            return Ok(friends);
+        }
     }
 }
