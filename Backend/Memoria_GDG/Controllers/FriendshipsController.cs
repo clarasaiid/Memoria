@@ -8,7 +8,7 @@ using Memoria_GDG.Dtos;
 namespace Memoria_GDG.Controllers
 {
     [ApiController]
-    [Route("api/friend-requests")]
+    [Route("api/[controller]")]
     public class FriendshipsController : ControllerBase
     {
         private readonly AppDbContext _context;

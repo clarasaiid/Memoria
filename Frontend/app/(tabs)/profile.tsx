@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, Image, TouchableOpacity, ScrollView, FlatList, Modal, TextInput, useWindowDimensions, ImageBackground, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, Image, TouchableOpacity, ScrollView, FlatList, Modal, TextInput, useWindowDimensions, ImageBackground, ActivityIndicator, Alert } from 'react-native';
 import { Settings, Grid, List, Heart, MessageCircle, Send, Bookmark as BookmarkSimple, MoveHorizontal as MoreHorizontal } from 'lucide-react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { apiService } from '../services/api';
@@ -26,14 +26,21 @@ export default function ProfileScreen() {
   const [followers, setFollowers] = useState<any[]>([]);
   const [following, setFollowing] = useState<any[]>([]);
   const router = useRouter();
+  const [menuPostId, setMenuPostId] = useState<number | null>(null);
+  const [menuVisible, setMenuVisible] = useState(false);
 
   useEffect(() => {
-    const fetchProfile = async () => {
+    const fetchProfileAndPosts = async () => {
       setLoading(true);
       try {
         const res = await apiService.get('/auth/me') as any;
         setProfile(res.profile);
-        setPosts(res.posts || []);
+
+        // Fetch posts for this user
+        const postsRes = await apiService.get('/posts');
+        const userPosts = postsRes.filter((p: any) => p.user?.id === res.profile.id && !p.isArchived);
+        setPosts(userPosts);
+
         setFriends(res.friends || []);
         setFollowers(res.followers || []);
         setFollowing(res.following || []);
@@ -43,7 +50,7 @@ export default function ProfileScreen() {
         setLoading(false);
       }
     };
-    fetchProfile();
+    fetchProfileAndPosts();
   }, []);
 
   const getListData = () => {
@@ -70,6 +77,30 @@ export default function ProfileScreen() {
       alignSelf: 'center',
     },
   });
+
+  const handleDeletePost = async (postId: number) => {
+    try {
+      await apiService.delete(`/posts/${postId}`);
+      setPosts(posts.filter((p) => p.id !== postId));
+      setMenuVisible(false);
+      setMenuPostId(null);
+    } catch (e) {
+      Alert.alert('Error', 'Failed to delete post.');
+    }
+  };
+
+  const handleArchivePost = async (postId: number) => {
+    try {
+      await apiService.put(`/posts/archive/${postId}`);
+      setMenuVisible(false);
+      setMenuPostId(null);
+      router.push('/archive');
+    } catch (e) {
+      Alert.alert('Error', 'Failed to archive post.');
+    }
+  };
+
+  const visiblePosts = posts.filter((p) => !p.isArchived);
 
   if (loading || !profile) {
     return (
@@ -145,20 +176,41 @@ export default function ProfileScreen() {
         <View style={{ marginTop: 12 }} />
         {viewMode === 'grid' ? (
           <FlatList
-            data={posts}
+            data={visiblePosts}
             horizontal
             keyExtractor={item => item.id.toString()}
             renderItem={({ item }) => (
-              <TouchableOpacity onPress={() => router.push({ pathname: '/post/[id]', params: { id: item.id.toString() } })}>
-                <Image source={{ uri: item.imageUrl }} style={{ width: 110, height: 110, borderRadius: 10, marginHorizontal: 4 }} />
-              </TouchableOpacity>
+              <View style={{ position: 'relative', marginHorizontal: 8, marginVertical: 8 }}>
+                <TouchableOpacity onPress={() => router.push({ pathname: '/post/[id]', params: { id: item.id.toString() } })}>
+                  <Image
+                    source={{ uri: item.imageUrl }}
+                    style={{
+                      width: 180,
+                      height: 180,
+                      borderRadius: 18,
+                      backgroundColor: colors.card,
+                      shadowColor: '#000',
+                      shadowOpacity: 0.12,
+                      shadowRadius: 8,
+                      shadowOffset: { width: 0, height: 2 },
+                      elevation: 4,
+                    }}
+                  />
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={{ position: 'absolute', top: 10, right: 10, backgroundColor: colors.card, borderRadius: 16, padding: 4, zIndex: 10 }}
+                  onPress={() => { setMenuPostId(item.id); setMenuVisible(true); }}
+                >
+                  <MoreHorizontal size={20} color={colors.textSecondary} />
+                </TouchableOpacity>
+              </View>
             )}
             style={{ marginBottom: 20 }}
             showsHorizontalScrollIndicator={false}
           />
         ) : (
           <View style={{ marginTop: 8, alignItems: 'center', backgroundColor: colors.card }}>
-            {posts.map(item => (
+            {visiblePosts.map(item => (
               <View key={item.id} style={styles.postCard}>
                 <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 8 }}>
                   <View style={{ flexDirection: 'row', alignItems: 'center' }}>
@@ -168,7 +220,7 @@ export default function ProfileScreen() {
                       <Text style={{ fontSize: 12, color: colors.textSecondary }}>{profile.bio || ' '}</Text>
                     </View>
                   </View>
-                  <TouchableOpacity>
+                  <TouchableOpacity onPress={() => { console.log('Three dots clicked', item.id); setMenuPostId(item.id); setMenuVisible(true); }}>
                     <MoreHorizontal size={20} color={colors.textSecondary} />
                   </TouchableOpacity>
                 </View>
@@ -192,7 +244,7 @@ export default function ProfileScreen() {
                 <View style={{ paddingHorizontal: 16 }}>
                   <Text style={{ fontSize: 14, color: colors.text, fontWeight: 'bold', marginBottom: 4 }}>{0} likes</Text>
                   <Text style={{ fontSize: 14, color: colors.text, lineHeight: 20, marginBottom: 2 }}>
-                    <Text style={{ fontWeight: 'bold', color: colors.text }}>{profile.username}</Text> No caption
+                    <Text style={{ fontWeight: 'bold', color: colors.text }}>{profile.username}</Text> {item.content || ''}
                   </Text>
                   <Text style={{ fontSize: 12, color: colors.textSecondary, marginTop: 0, marginBottom: 7 }}>Just now</Text>
                 </View>
@@ -243,6 +295,37 @@ export default function ProfileScreen() {
               <Text style={{ color: colors.buttonText }}>Close</Text>
             </TouchableOpacity>
           </View>
+        </Modal>
+
+        {/* Modal for post menu */}
+        <Modal
+          visible={menuVisible}
+          transparent
+          animationType="fade"
+          onRequestClose={() => setMenuVisible(false)}
+        >
+          <TouchableOpacity
+            style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.3)', justifyContent: 'center', alignItems: 'center' }}
+            onPress={() => setMenuVisible(false)}
+            activeOpacity={1}
+          >
+            <View
+              style={{
+                backgroundColor: colors.card,
+                borderRadius: 12,
+                padding: 24,
+                minWidth: 220,
+                alignItems: 'center',
+              }}
+            >
+              <TouchableOpacity onPress={() => handleDeletePost(menuPostId!)} style={{ marginBottom: 18 }}>
+                <Text style={{ color: 'red', fontWeight: 'bold', fontSize: 16 }}>Delete</Text>
+              </TouchableOpacity>
+              <TouchableOpacity onPress={() => handleArchivePost(menuPostId!)} >
+                <Text style={{ color: colors.primary, fontWeight: 'bold', fontSize: 16 }}>Archive</Text>
+              </TouchableOpacity>
+            </View>
+          </TouchableOpacity>
         </Modal>
       </ScrollView>
     </SafeAreaView>

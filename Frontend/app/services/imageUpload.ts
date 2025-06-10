@@ -1,4 +1,5 @@
 import { Platform } from 'react-native';
+import { apiService } from './api';
 
 function dataURLtoFile(dataurl: string, filename: string) {
   var arr = dataurl.split(',');
@@ -52,7 +53,7 @@ export async function uploadImage(uri: string): Promise<string> {
     }
     // DO NOT set 'Content-Type' here!
 
-    const response = await fetch('http://localhost:7000/api/upload', {
+    const response = await fetch(`${process.env.EXPO_PUBLIC_API_URL || 'http://localhost:7000'}/api/upload`, {
       method: 'POST',
       body: formData,
       headers,
@@ -61,8 +62,8 @@ export async function uploadImage(uri: string): Promise<string> {
       throw new Error('Upload failed');
     }
     const data = await response.json();
-    // The backend always returns the correct extension in imageUrl!
-    return `http://localhost:7000${data.imageUrl}`;
+    // Return just the path, not the full URL
+    return data.imageUrl;
   } catch (error) {
     console.error('Error uploading image:', error);
     throw error;

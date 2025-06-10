@@ -13,7 +13,7 @@ using Microsoft.AspNetCore.Authorization;
 namespace Memoria_GDG.Controllers
 {
     [ApiController]
-    [Route("auth")]
+    [Route("api/[controller]")]
     public class AuthController : ControllerBase
     {
         private readonly UserManager<User> _userManager;

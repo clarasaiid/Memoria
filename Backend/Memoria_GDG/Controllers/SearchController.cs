@@ -8,7 +8,7 @@ using Microsoft.AspNetCore.Authorization;
 namespace Memoria_GDG.Controllers
 {
     [ApiController]
-    [Route("api/search")]
+    [Route("api/[controller]")]
     [Authorize]
     public class SearchController : ControllerBase
     {

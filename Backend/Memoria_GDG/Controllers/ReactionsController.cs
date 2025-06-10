@@ -7,7 +7,7 @@ using System.Collections.Generic;
 namespace Memoria_GDG.Controllers
 {
     [ApiController]
-    [Route("reactions")]
+    [Route("api/[controller]")]
     public class ReactionsController : ControllerBase
     {
         private readonly AppDbContext _context;
