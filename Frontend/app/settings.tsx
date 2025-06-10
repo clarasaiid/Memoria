@@ -4,11 +4,19 @@ import { useState } from 'react';
 import { ArrowLeft } from 'lucide-react-native';
 import { router } from 'expo-router';
 import { useTheme } from '../components/ThemeProvider';
+import { Ionicons } from '@expo/vector-icons';
 
 export default function SettingsScreen() {
-  const [notifications, setNotifications] = useState(true);
   const [privateAccount, setPrivateAccount] = useState(false);
   const { isDark, colors, toggleTheme } = useTheme();
+
+  const handleChangePassword = () => {
+    router.push('/change-password');
+  };
+
+  const handleLogout = () => {
+    router.push('/login');
+  };
 
   return (
     <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]}>
@@ -23,24 +31,19 @@ export default function SettingsScreen() {
         {/* Account Section */}
         <Text style={[styles.sectionTitle, { color: colors.text }]}>Account</Text>
         <View style={[styles.sectionBox, { backgroundColor: colors.cardAlt, borderColor: colors.border }]}>
-          <TouchableOpacity style={styles.row}>
+          <TouchableOpacity style={styles.row} onPress={() => router.push('/edit-profile')}>
             <Text style={[styles.rowText, { color: colors.text }]}>Edit Profile</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.row}>
+          <TouchableOpacity style={styles.row} onPress={handleChangePassword}>
             <Text style={[styles.rowText, { color: colors.text }]}>Change Password</Text>
           </TouchableOpacity>
-        </View>
-
-        {/* Notifications Section */}
-        <Text style={[styles.sectionTitle, { color: colors.text }]}>Notifications</Text>
-        <View style={[styles.sectionBox, { backgroundColor: colors.cardAlt, borderColor: colors.border }]}>
-          <View style={styles.row}>
-            <Text style={[styles.rowText, { color: colors.text }]}>Push Notifications</Text>
-            <Switch value={notifications} onValueChange={setNotifications}
-              trackColor={{ false: colors.border, true: colors.primary }}
-              thumbColor={notifications ? colors.button : colors.card}
-            />
-          </View>
+          <TouchableOpacity style={styles.row} onPress={() => {
+            // TODO: Implement archive functionality
+            alert('Archive functionality coming soon!');
+          }}>
+            <Text style={[styles.rowText, { color: colors.text }]}>Archive</Text>
+            <Ionicons name="archive-outline" size={24} color={colors.text} />
+          </TouchableOpacity>
         </View>
 
         {/* Privacy Section */}
@@ -68,7 +71,7 @@ export default function SettingsScreen() {
         </View>
 
         {/* Log Out */}
-        <TouchableOpacity style={[styles.logoutBtn, { backgroundColor: colors.error }]} onPress={() => router.push('/login')}>
+        <TouchableOpacity style={[styles.logoutBtn, { backgroundColor: colors.error }]} onPress={handleLogout}>
           <Text style={[styles.logoutText, { color: colors.buttonText }]}>Log Out</Text>
         </TouchableOpacity>
       </ScrollView>
@@ -131,4 +134,4 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     fontSize: 16,
   },
-}); 
+});

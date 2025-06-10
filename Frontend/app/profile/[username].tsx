@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
-import { useLocalSearchParams } from 'expo-router';
-import { View, Text, StyleSheet, Image, TouchableOpacity, ScrollView, FlatList, Modal, TextInput, useWindowDimensions, ImageBackground, ActivityIndicator } from 'react-native';
-import { Heart, MessageCircle, Send, Bookmark as BookmarkSimple, MoveHorizontal as MoreHorizontal } from 'lucide-react-native';
+import { useLocalSearchParams, useRouter } from 'expo-router';
+import { View, Text, StyleSheet, Image, TouchableOpacity, ScrollView, FlatList, Modal, TextInput, useWindowDimensions, ImageBackground, ActivityIndicator, Platform } from 'react-native';
+import { Heart, MessageCircle, Send, Bookmark as BookmarkSimple, MoveHorizontal as MoreHorizontal, ArrowLeft } from 'lucide-react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { apiService } from '../services/api';
 import { useTheme } from '../../components/ThemeProvider';
@@ -11,6 +11,7 @@ const PROFILE_SIZE = 110;
 const fallbackCover = 'https://images.unsplash.com/photo-1506744038136-46273834b3fb';
 
 export default function PublicProfileScreen() {
+  const router = useRouter();
   const { width } = useWindowDimensions();
   const { username } = useLocalSearchParams();
   const { colors, isDark } = useTheme();
@@ -25,15 +26,33 @@ export default function PublicProfileScreen() {
   const [listModal, setListModal] = useState({ visible: false, type: '', data: [] });
   const [search, setSearch] = useState('');
   const [error, setError] = useState('');
+  const [isFollowing, setIsFollowing] = useState(false);
+  const [isFriend, setIsFriend] = useState(false);
+  const [isLoadingAction, setIsLoadingAction] = useState(false);
+  const [friendshipId, setFriendshipId] = useState<string | null>(null);
 
   useEffect(() => {
     const fetchProfile = async () => {
       setLoading(true);
       setError('');
       try {
-        const res = await apiService.get(`/users/username/${username}`);
+        const res = await apiService.get(`/users/username/${username}`) as any;
         setProfile(res);
-        // Optionally fetch posts, friends, followers, following if you have endpoints
+        // Fetch relationship status
+        const relationshipRes = await apiService.get(`/users/${res.id}/relationship`) as any;
+        setIsFollowing(relationshipRes.isFollowing);
+        setIsFriend(relationshipRes.isFriend);
+        // Fetch friendshipId if friends
+        if (relationshipRes.isFriend) {
+          // Fetch all friend-requests and find the one with this user
+          const friendRequests = await apiService.get('/api/friend-requests') as any[];
+          const friendship = friendRequests.find((f: any) =>
+            (f.UserId === res.id || f.FriendId === res.id) && f.Accepted
+          );
+          if (friendship) setFriendshipId(friendship.id);
+        } else {
+          setFriendshipId(null);
+        }
       } catch (e: any) {
         setError('User not found');
         setProfile(null);
@@ -43,6 +62,52 @@ export default function PublicProfileScreen() {
     };
     if (username) fetchProfile();
   }, [username]);
+
+  const handleFollow = async () => {
+    if (!profile || isLoadingAction) return;
+    setIsLoadingAction(true);
+    try {
+      if (isFollowing) {
+        await apiService.delete(`/users/${profile.id}/follow`);
+        setIsFollowing(false);
+      } else {
+        await apiService.post(`/users/${profile.id}/follow`);
+        setIsFollowing(true);
+      }
+    } catch (error) {
+      console.error('Error toggling follow:', error);
+    } finally {
+      setIsLoadingAction(false);
+    }
+  };
+
+  const handleFriend = async () => {
+    if (!profile || isLoadingAction) return;
+    setIsLoadingAction(true);
+    try {
+      if (isFriend) {
+        if (friendshipId) {
+          await apiService.delete(`/api/friend-requests/${friendshipId}`);
+          setIsFriend(false);
+          setFriendshipId(null);
+        }
+      } else {
+        // You may need to get current user id from auth context or profile
+        const me = await apiService.get('/auth/me') as any;
+        const resp = await apiService.post('/api/friend-requests', {
+          UserId: me.profile.id,
+          FriendId: profile.id,
+          Accepted: false
+        }) as any;
+        setIsFriend(true);
+        setFriendshipId(resp.id);
+      }
+    } catch (error) {
+      console.error('Error toggling friend:', error);
+    } finally {
+      setIsLoadingAction(false);
+    }
+  };
 
   const getListData = () => {
     let data: any[] = [];
@@ -64,7 +129,15 @@ export default function PublicProfileScreen() {
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.background }}>
-      <ScrollView style={{ flex: 1, backgroundColor: colors.background }} contentContainerStyle={{ paddingBottom: 40 }}>
+      {/* Back Button */}
+      <TouchableOpacity 
+        onPress={() => router.back()}
+        style={[styles.backButton, { backgroundColor: isDark ? 'rgba(0,0,0,0.5)' : 'rgba(255,255,255,0.5)' }]}
+      >
+        <ArrowLeft size={24} color={colors.text} />
+      </TouchableOpacity>
+
+      <ScrollView style={{ flex: 1, backgroundColor: colors.background }} contentContainerStyle={{ paddingBottom: 100 }}>
         {/* Cover Photo as background */}
         <ImageBackground source={{ uri: profile.coverPhotoUrl || fallbackCover }} style={{ width: '100%', minHeight: COVER_HEIGHT + 60, paddingBottom: 16, justifyContent: 'flex-end' }}>
           <View style={{ ...StyleSheet.absoluteFillObject, backgroundColor: isDark ? 'rgba(24,26,32,0.7)' : 'rgba(255,255,255,0.7)', zIndex: 1 }} />
@@ -83,12 +156,42 @@ export default function PublicProfileScreen() {
                 </TouchableOpacity>
               </View>
               <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 6 }}>
-                {/* Show follow/add friend button here for public profile */}
-                <TouchableOpacity style={{ backgroundColor: colors.primary, borderRadius: 8, paddingVertical: 7, paddingHorizontal: 16, marginRight: 8 }}>
-                  <Text style={{ color: colors.buttonText, fontWeight: 'bold', fontSize: 15 }}>Follow</Text>
+                <TouchableOpacity 
+                  style={[
+                    styles.actionButton,
+                    { 
+                      backgroundColor: isFollowing ? colors.primaryLight : colors.primary,
+                      marginRight: 8
+                    }
+                  ]}
+                  onPress={handleFollow}
+                  disabled={isLoadingAction}
+                >
+                  <Text style={{ 
+                    color: isFollowing ? colors.text : colors.buttonText,
+                    fontWeight: 'bold',
+                    fontSize: 15
+                  }}>
+                    {isFollowing ? 'Unfollow' : 'Follow'}
+                  </Text>
                 </TouchableOpacity>
-                <TouchableOpacity style={{ backgroundColor: colors.primaryLight, borderRadius: 8, padding: 7, justifyContent: 'center', alignItems: 'center' }}>
-                  <Text style={{ color: colors.text }}>Add Friend</Text>
+                <TouchableOpacity 
+                  style={[
+                    styles.actionButton,
+                    { 
+                      backgroundColor: isFriend ? colors.primaryLight : colors.primary,
+                    }
+                  ]}
+                  onPress={handleFriend}
+                  disabled={isLoadingAction}
+                >
+                  <Text style={{ 
+                    color: isFriend ? colors.text : colors.buttonText,
+                    fontWeight: 'bold',
+                    fontSize: 15
+                  }}>
+                    {isFriend ? 'Unfriend' : 'Add Friend'}
+                  </Text>
                 </TouchableOpacity>
               </View>
             </View>
@@ -146,7 +249,7 @@ export default function PublicProfileScreen() {
             />
             <FlatList
               data={getListData()}
-              keyExtractor={item => item.id?.toString() || Math.random().toString()}
+              keyExtractor={item => (item.id !== undefined && item.id !== null ? item.id.toString() : Math.random().toString())}
               renderItem={({ item }) => (
                 <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 10 }}>
                   <Image source={{ uri: item.profilePictureUrl }} style={{ width: 40, height: 40, borderRadius: 20, marginRight: 10 }} />
@@ -170,5 +273,18 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     padding: 24,
+  },
+  backButton: {
+    position: Platform.OS === 'web' ? 'fixed' : 'absolute',
+    top: 20,
+    left: 20,
+    padding: 12,
+    borderRadius: 12,
+    zIndex: 1000,
+    backgroundColor: 'rgba(255,255,255,0.7)',
+  },
+  actionButton: {
+    padding: 7,
+    borderRadius: 8,
   },
 }); 

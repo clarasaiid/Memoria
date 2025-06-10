@@ -1,20 +1,29 @@
-import { View, Text, StyleSheet, Image, TouchableOpacity } from 'react-native';
+import React from 'react';
+import { View, TouchableOpacity, Image, StyleSheet, Text } from 'react-native';
 
 interface StoryCircleProps {
   imageUrl: string;
   username: string;
-  isViewed: boolean;
+  isViewed?: boolean;
+  onPress: () => void;
+  size?: number;
 }
 
-export default function StoryCircle({ imageUrl, username, isViewed }: StoryCircleProps) {
+const DEFAULT_AVATAR = 'https://ui-avatars.com/api/?name=User&background=F3E8FF&color=A78BFA';
+
+export default function StoryCircle({ imageUrl, username, isViewed, onPress, size = 70 }: StoryCircleProps) {
+  // Debug: log the imageUrl
+  console.log('StoryCircle imageUrl:', imageUrl);
   return (
-    <TouchableOpacity style={styles.container}>
-      <View style={[styles.imageContainer, isViewed ? styles.viewedBorder : styles.unviewedBorder]}>
-        <Image source={{ uri: imageUrl }} style={styles.image} />
+    <TouchableOpacity style={[styles.container, { width: size, height: size }]} onPress={onPress}>
+      <View style={[styles.circle, { borderColor: isViewed ? '#E2E8F0' : '#A78BFA', width: size, height: size, borderRadius: size / 2, overflow: 'hidden' }]}> 
+        <Image
+          source={{ uri: imageUrl || DEFAULT_AVATAR }}
+          style={{ width: size - 8, height: size - 8, borderRadius: (size - 8) / 2 }}
+          resizeMode="cover"
+        />
       </View>
-      <Text style={styles.username} numberOfLines={1}>
-        {username}
-      </Text>
+      <Text style={styles.username} numberOfLines={1}>{username}</Text>
     </TouchableOpacity>
   );
 }
@@ -22,34 +31,19 @@ export default function StoryCircle({ imageUrl, username, isViewed }: StoryCircl
 const styles = StyleSheet.create({
   container: {
     alignItems: 'center',
-    marginRight: 12,
-    width: 80,
+    marginRight: 8,
   },
-  imageContainer: {
-    width: 68,
-    height: 68,
-    borderRadius: 34,
-    padding: 2,
+  circle: {
+    borderWidth: 2,
+    justifyContent: 'center',
+    alignItems: 'center',
     marginBottom: 4,
-  },
-  unviewedBorder: {
-    borderWidth: 2,
-    borderColor: '#A78BFA',
-  },
-  viewedBorder: {
-    borderWidth: 2,
-    borderColor: '#CBD5E1',
-  },
-  image: {
-    width: '100%',
-    height: '100%',
-    borderRadius: 32,
+    // borderRadius and overflow are set inline for dynamic size
   },
   username: {
-    fontFamily: 'Inter-Regular',
-    fontSize: 12,
-    color: '#0F172A',
+    fontSize: 13,
+    color: '#334155',
+    maxWidth: 80,
     textAlign: 'center',
-    width: '100%',
   },
 });

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import {
   View,
   Text,
@@ -10,10 +10,13 @@ import {
   Image,
   SafeAreaView,
   Pressable,
+  TouchableWithoutFeedback,
+  findNodeHandle,
 } from 'react-native';
 import { useRouter } from 'expo-router';
-import { User as UserIcon, Search as SearchIcon, Calendar, Plus, Bell, Heart, MessageCircle, X } from 'lucide-react-native';
+import { User as UserIcon, Search as SearchIcon, Calendar, Plus, Bell, Heart, MessageCircle, X, Users } from 'lucide-react-native';
 import { useTheme } from '../../components/ThemeProvider';
+import { searchService, SearchResult, UserResult, HashtagResult, GroupResult } from '../services/searchService';
 
 const AVATAR_PLACEHOLDER = 'https://ui-avatars.com/api/?name=User&background=F3E8FF&color=A78BFA';
 const CAPSULE_PLACEHOLDER = 'https://images.unsplash.com/photo-1506744038136-46273834b3fb?auto=format&fit=crop&w=400&q=80';
@@ -92,6 +95,14 @@ export default function HomePage() {
   const [commentInputs, setCommentInputs] = useState<{ [id: number]: string }>({});
   const [comments, setComments] = useState<{ [id: number]: { id: number; username: string; text: string }[] }>(mockComments);
   const [showSearchBar, setShowSearchBar] = useState(false);
+  const [searchResults, setSearchResults] = useState<SearchResult | null>(null);
+  const [isSearching, setIsSearching] = useState(false);
+  const searchBarRef = useRef(null);
+  const searchBarContainerRef = useRef(null);
+  const dropdownRef = useRef(null);
+  const [dropdownPos, setDropdownPos] = useState({ top: 0, left: 0, width: 300 });
+  const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
+  const [searchBarFocused, setSearchBarFocused] = useState(false);
 
   useEffect(() => {
     setPublicCapsules(mockPublicCapsules);
@@ -99,6 +110,56 @@ export default function HomePage() {
     setFollowingFeed(mockFollowingFeed);
     setPeople(mockPeople);
   }, []);
+
+  useEffect(() => {
+    const performSearch = async () => {
+      if (!search.trim()) {
+        setSearchResults(null);
+        return;
+      }
+
+      setIsSearching(true);
+      try {
+        const results = await searchService.search(search);
+        setSearchResults(results);
+      } catch (error) {
+        console.error('Search error:', error);
+      } finally {
+        setIsSearching(false);
+      }
+    };
+
+    const debounceTimer = setTimeout(performSearch, 300);
+    return () => clearTimeout(debounceTimer);
+  }, [search]);
+
+  useEffect(() => {
+    if (showSearchBar && searchBarRef.current) {
+      setTimeout(() => {
+        searchBarRef.current.measure((x, y, width, height, pageX, pageY) => {
+          setDropdownPos({ top: pageY + height, left: pageX, width });
+        });
+      }, 100);
+    }
+  }, [showSearchBar, searchBarRef.current, search]);
+
+  // Web: close search bar if click is outside search bar and dropdown
+  useEffect(() => {
+    if (!showSearchBar) return;
+    function handleClick(event) {
+      if (
+        (searchBarContainerRef.current && searchBarContainerRef.current.contains(event.target)) ||
+        (dropdownRef.current && dropdownRef.current.contains(event.target))
+      ) {
+        return;
+      }
+      setShowSearchBar(false);
+      setSearch('');
+      setSearchResults(null);
+    }
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, [showSearchBar]);
 
   const isWide = Dimensions.get('window').width > 900;
 
@@ -200,10 +261,14 @@ export default function HomePage() {
     },
     notificationButton: {
       padding: 8,
-      borderRadius: 8,
+      borderRadius: 12,
       backgroundColor: colors.card,
       borderWidth: 1,
       borderColor: colors.border,
+      width: 40,
+      height: 40,
+      justifyContent: 'center',
+      alignItems: 'center',
     },
     postCard: { backgroundColor: colors.card, borderRadius: 12, padding: 16, marginBottom: 16, shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 6, elevation: 3, borderWidth: 1, borderColor: colors.border },
     postHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 10 },
@@ -251,7 +316,201 @@ export default function HomePage() {
       fontSize: 15,
     },
     sidebarContent: { marginTop: 32 },
+    searchResults: {
+      position: 'absolute',
+      top: '100%',
+      left: 0,
+      right: 0,
+      maxHeight: 500,
+      backgroundColor: colors.card,
+      borderRadius: 12,
+      borderWidth: 1,
+      borderColor: colors.border,
+      zIndex: 1001,
+      padding: 12,
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 4 },
+      shadowOpacity: 0.1,
+      shadowRadius: 12,
+      elevation: 5,
+    },
+    searchSection: {
+      marginBottom: 16,
+    },
+    searchSectionTitle: {
+      fontSize: 16,
+      fontWeight: '600',
+      marginBottom: 8,
+      color: colors.primary,
+    },
+    searchItem: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingVertical: 8,
+      paddingHorizontal: 12,
+      borderRadius: 8,
+      backgroundColor: colors.cardAlt,
+      marginBottom: 4,
+      transitionProperty: 'background-color',
+      transitionDuration: '0.15s',
+    },
+    searchItemAvatar: {
+      width: 40,
+      height: 40,
+      borderRadius: 20,
+      marginRight: 12,
+    },
+    searchItemInfo: {
+      flex: 1,
+    },
+    searchItemName: {
+      fontSize: 15,
+      fontWeight: '500',
+      color: colors.text,
+    },
+    searchItemSubtext: {
+      fontSize: 13,
+      marginTop: 2,
+      color: colors.textSecondary,
+    },
+    hashtagIcon: {
+      width: 40,
+      height: 40,
+      borderRadius: 20,
+      marginRight: 12,
+      justifyContent: 'center',
+      alignItems: 'center',
+      backgroundColor: colors.cardAlt,
+    },
+    hashtagText: {
+      fontSize: 20,
+      fontWeight: '600',
+      color: colors.primary,
+    },
+    groupIcon: {
+      width: 40,
+      height: 40,
+      borderRadius: 20,
+      marginRight: 12,
+      justifyContent: 'center',
+      alignItems: 'center',
+      backgroundColor: colors.cardAlt,
+    },
+    noResults: {
+      textAlign: 'center',
+      padding: 20,
+      fontSize: 15,
+      color: colors.textSecondary,
+    },
   });
+
+  const renderSearchResults = () => {
+    if (!searchResults) return null;
+
+    return (
+      <View style={[styles.searchResults, { backgroundColor: colors.card }]}>
+        {/* Users */}
+        {searchResults.users.length > 0 && (
+          <View style={styles.searchSection}>
+            <Text style={[styles.searchSectionTitle, { color: colors.primary }]}>Users</Text>
+            {searchResults.users.map((user, i) => (
+              <TouchableOpacity
+                key={user.id}
+                style={[styles.searchItem, { backgroundColor: hoveredIndex === i ? colors.card : colors.cardAlt }]}
+                onPress={() => {
+                  setShowSearchBar(false);
+                  setSearch('');
+                  router.push(`/profile/${user.userName}`);
+                }}
+                onMouseEnter={() => setHoveredIndex(i)}
+                onMouseLeave={() => setHoveredIndex(null)}
+              >
+                <Image
+                  source={{ uri: user.profilePictureUrl || `https://ui-avatars.com/api/?name=${user.userName}` }}
+                  style={styles.searchItemAvatar}
+                />
+                <View style={styles.searchItemInfo}>
+                  <Text style={[styles.searchItemName, { color: colors.text }]}>{user.userName}</Text>
+                  <Text style={[styles.searchItemSubtext, { color: colors.textSecondary }]}>
+                    {user.firstName} {user.lastName}
+                  </Text>
+                </View>
+              </TouchableOpacity>
+            ))}
+          </View>
+        )}
+
+        {/* Hashtags */}
+        {searchResults.hashtags.length > 0 && (
+          <View style={styles.searchSection}>
+            <Text style={[styles.searchSectionTitle, { color: colors.primary }]}>Hashtags</Text>
+            {searchResults.hashtags.map((hashtag, i) => (
+              <TouchableOpacity
+                key={hashtag.tag}
+                style={[styles.searchItem, { backgroundColor: hoveredIndex === i ? colors.card : colors.cardAlt }]}
+                onPress={() => {
+                  setShowSearchBar(false);
+                  setSearch('');
+                  router.push(`/hashtag/${hashtag.tag}`);
+                }}
+                onMouseEnter={() => setHoveredIndex(i)}
+                onMouseLeave={() => setHoveredIndex(null)}
+              >
+                <View style={[styles.hashtagIcon, { backgroundColor: hoveredIndex === i ? colors.primary : colors.cardAlt }]}>
+                  <Text style={[styles.hashtagText, { color: hoveredIndex === i ? colors.buttonText : colors.primary }]}>#</Text>
+                </View>
+                <View style={styles.searchItemInfo}>
+                  <Text style={[styles.searchItemName, { color: colors.text }]}>{hashtag.tag}</Text>
+                  <Text style={[styles.searchItemSubtext, { color: colors.textSecondary }]}>
+                    {hashtag.count} posts
+                  </Text>
+                </View>
+              </TouchableOpacity>
+            ))}
+          </View>
+        )}
+
+        {/* Groups */}
+        {searchResults.groups.length > 0 && (
+          <View style={styles.searchSection}>
+            <Text style={[styles.searchSectionTitle, { color: colors.primary }]}>Groups</Text>
+            {searchResults.groups.map((group, i) => (
+              <TouchableOpacity
+                key={group.id}
+                style={[styles.searchItem, { backgroundColor: hoveredIndex === i ? colors.card : colors.cardAlt }]}
+                onPress={() => {
+                  setShowSearchBar(false);
+                  setSearch('');
+                  router.push(`/groups/${group.id}`);
+                }}
+                onMouseEnter={() => setHoveredIndex(i)}
+                onMouseLeave={() => setHoveredIndex(null)}
+              >
+                <View style={[styles.groupIcon, { backgroundColor: hoveredIndex === i ? colors.primary : colors.cardAlt }]}>
+                  <Users size={20} color={hoveredIndex === i ? colors.buttonText : colors.primary} />
+                </View>
+                <View style={styles.searchItemInfo}>
+                  <Text style={[styles.searchItemName, { color: colors.text }]}>{group.name}</Text>
+                  <Text style={[styles.searchItemSubtext, { color: colors.textSecondary }]}>
+                    {group.memberCount} members
+                  </Text>
+                </View>
+              </TouchableOpacity>
+            ))}
+          </View>
+        )}
+
+        {/* No Results */}
+        {searchResults.users.length === 0 && 
+         searchResults.hashtags.length === 0 && 
+         searchResults.groups.length === 0 && (
+          <Text style={[styles.noResults, { color: colors.textSecondary }]}>
+            No results found
+          </Text>
+        )}
+      </View>
+    );
+  };
 
   return (
     <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }] }>
@@ -319,7 +578,7 @@ export default function HomePage() {
           )}
 
           <View style={styles.feedBox}>
-            <View style={styles.tabBar}>
+            <View style={[styles.tabBar, { position: 'relative' }]}>
               <View style={styles.tabItems}>
                 {(['for-you', 'following'] as const).map(tab => (
                   <TouchableOpacity
@@ -333,33 +592,100 @@ export default function HomePage() {
                   </TouchableOpacity>
                 ))}
               </View>
-              {showSearchBar ? (
-                <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1, marginLeft: 16 }}>
-                  <TextInput
-                    style={{ flex: 1, backgroundColor: colors.card, borderRadius: 8, paddingHorizontal: 12, height: 40, color: colors.text, borderWidth: 1, borderColor: colors.border }}
-                    placeholder="Search Memoria..."
-                    placeholderTextColor={colors.textSecondary}
-                    value={search}
-                    onChangeText={setSearch}
-                    autoFocus
-                  />
-                  <TouchableOpacity onPress={() => setShowSearchBar(false)} style={{ marginLeft: 8 }}>
-                    <X size={22} color={colors.text} />
-                  </TouchableOpacity>
-                </View>
-              ) : (
-                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                  <TouchableOpacity onPress={() => setShowSearchBar(true)} style={styles.notificationButton}>
+              {/* Search bar and icons at far right */}
+              <View style={{ position: 'absolute', right: 0, top: 0, height: '100%', flexDirection: 'row', alignItems: 'center', zIndex: 10 }}>
+                {/* Animated search bar expansion */}
+                <View ref={searchBarContainerRef} style={{ flexDirection: 'row', alignItems: 'center', position: 'relative' }}>
+                  {showSearchBar && (
+                    <View
+                      ref={searchBarRef}
+                      style={[
+                        styles.searchBar,
+                        {
+                          position: 'relative',
+                          width: 256,
+                          height: 40,
+                          minHeight: 40,
+                          maxHeight: 40,
+                          marginBottom: 0,
+                          backgroundColor: colors.card,
+                          borderTopLeftRadius: 12,
+                          borderBottomLeftRadius: 12,
+                          borderTopRightRadius: 0,
+                          borderBottomRightRadius: 0,
+                          shadowOpacity: 0,
+                          borderBottomWidth: 0,
+                          borderWidth: 1,
+                          borderColor: colors.border,
+                          transitionProperty: 'width',
+                          transitionDuration: '0.2s',
+                          transitionTimingFunction: 'ease',
+                          zIndex: 11,
+                          flexDirection: 'row',
+                          alignItems: 'center',
+                        },
+                      ]}
+                    >
+                      <TextInput
+                        style={[
+                          styles.searchInput,
+                          {
+                            height: 40,
+                            minHeight: 40,
+                            maxHeight: 40,
+                            paddingVertical: 0,
+                            lineHeight: 40,
+                            flex: 1,
+                          },
+                        ]}
+                        placeholder="Search Memoria..."
+                        placeholderTextColor={colors.textSecondary}
+                        value={search}
+                        onChangeText={setSearch}
+                        autoFocus
+                        onFocus={() => setSearchBarFocused(true)}
+                        onBlur={() => setSearchBarFocused(false)}
+                      />
+                      <TouchableOpacity onPress={() => {
+                        setShowSearchBar(false);
+                        setSearch('');
+                        setSearchResults(null);
+                      }}>
+                        <X size={22} color={colors.text} />
+                      </TouchableOpacity>
+                    </View>
+                  )}
+                  <TouchableOpacity
+                    onPress={() => setShowSearchBar(true)}
+                    style={[
+                      styles.notificationButton,
+                      {
+                        borderTopRightRadius: 12,
+                        borderBottomRightRadius: 12,
+                        borderTopLeftRadius: showSearchBar ? 0 : 12,
+                        borderBottomLeftRadius: showSearchBar ? 0 : 12,
+                        backgroundColor: colors.card,
+                        zIndex: 12,
+                        marginLeft: showSearchBar ? 0 : 8,
+                        borderLeftWidth: showSearchBar ? 0 : 1,
+                        borderColor: colors.border,
+                        height: 40,
+                        width: 40,
+                        justifyContent: 'center',
+                        alignItems: 'center',
+                      },
+                    ]}
+                  >
                     <SearchIcon size={20} color={colors.text} />
                   </TouchableOpacity>
-                  <TouchableOpacity 
+                  <TouchableOpacity
                     style={[styles.notificationButton, { marginLeft: 8 }]}
                     onPress={() => router.push('/notifications')}
                   >
                     <Bell size={20} color={colors.text} />
                   </TouchableOpacity>
                 </View>
-              )}
+              </View>
             </View>
             <ScrollView showsVerticalScrollIndicator={false}>
               {(feedTab === 'for-you' ? feed : followingFeed).map(post => (
@@ -427,23 +753,41 @@ export default function HomePage() {
             </ScrollView>
           </View>
         </View>
+        {/* Render dropdown at page level, absolutely positioned */}
+        {showSearchBar && searchResults && (
+          <View
+            ref={dropdownRef}
+            style={{
+              position: 'absolute',
+              top: dropdownPos.top,
+              left: dropdownPos.left,
+              width: dropdownPos.width,
+              backgroundColor: colors.card,
+              borderColor: colors.border,
+              borderWidth: 1,
+              borderTopWidth: 0,
+              zIndex: 2000,
+              shadowColor: '#000',
+              shadowOffset: { width: 0, height: 8 },
+              shadowOpacity: 0.18,
+              shadowRadius: 24,
+              elevation: 10,
+              borderRadius: 12,
+              borderTopLeftRadius: 0,
+              borderTopRightRadius: 0,
+              maxHeight: 500,
+              padding: 12,
+              paddingTop: 0,
+              marginTop: -4,
+              overflow: 'visible',
+            }}
+          >
+            {/* Subtle divider at the top of the dropdown */}
+            <View style={{ height: 1, backgroundColor: colors.border, opacity: 0.5, marginHorizontal: -12, marginBottom: 8 }} />
+            {renderSearchResults()}
+          </View>
+        )}
       </View>
-      {showSearchBar && (
-        <Pressable
-          style={{
-            position: 'absolute',
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            backgroundColor: 'transparent',
-            zIndex: 1000,
-          }}
-          onPress={() => setShowSearchBar(false)}
-        >
-          {/* Empty content to handle press */}
-        </Pressable>
-      )}
     </SafeAreaView>
   );
 }

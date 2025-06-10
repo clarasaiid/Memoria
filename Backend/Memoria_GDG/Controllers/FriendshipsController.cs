@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Memoria_GDG;
 using System.Threading.Tasks;
 using System.Collections.Generic;
+using Memoria_GDG.Dtos;
 
 namespace Memoria_GDG.Controllers
 {
@@ -34,8 +35,15 @@ namespace Memoria_GDG.Controllers
 
         // POST /friendships
         [HttpPost]
-        public async Task<ActionResult<Friendship>> CreateFriendship(Friendship friendship)
+        public async Task<ActionResult<Friendship>> CreateFriendship([FromBody] CreateFriendshipDto dto)
         {
+            var friendship = new Friendship
+            {
+                UserId = dto.UserId,
+                FriendId = dto.FriendId,
+                Accepted = dto.Accepted,
+                Status = "pending"
+            };
             _context.Friendships.Add(friendship);
             await _context.SaveChangesAsync();
             return CreatedAtAction(nameof(GetFriendship), new { id = friendship.Id }, friendship);

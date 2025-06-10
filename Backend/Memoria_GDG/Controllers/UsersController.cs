@@ -5,6 +5,8 @@ using System.Threading.Tasks;
 using System.Collections.Generic;
 using Microsoft.AspNetCore.Authorization;
 using System.Security.Claims;
+using Memoria_GDG.Dtos;
+using Microsoft.AspNetCore.Identity;
 
 namespace Memoria_GDG.Controllers
 {
@@ -13,9 +15,12 @@ namespace Memoria_GDG.Controllers
     public class UsersController : ControllerBase
     {
         private readonly AppDbContext _context;
-        public UsersController(AppDbContext context)
+        private readonly UserManager<User> _userManager;
+
+        public UsersController(AppDbContext context, UserManager<User> userManager)
         {
             _context = context;
+            _userManager = userManager;
         }
 
         // GET /users
@@ -57,18 +62,167 @@ namespace Memoria_GDG.Controllers
         // PUT /users/me
         [HttpPut("me")]
         [Authorize]
-        public async Task<IActionResult> UpdateOwnProfile([FromBody] User updatedUser)
+        public async Task<IActionResult> UpdateOwnProfile([FromBody] UpdateProfileDto dto)
         {
             var userId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier));
             var user = await _context.Users.FindAsync(userId);
             if (user == null) return NotFound();
-            // Only allow updating certain fields
-            user.Bio = updatedUser.Bio;
-            user.ProfilePictureUrl = updatedUser.ProfilePictureUrl;
-            user.CoverPhotoUrl = updatedUser.CoverPhotoUrl;
-            // You can add more fields as needed
+
+            // Check if username is being changed and if it's available
+            if (!string.IsNullOrEmpty(dto.Username) && dto.Username != user.UserName)
+            {
+                var existingUser = await _context.Users.FirstOrDefaultAsync(u => u.UserName == dto.Username);
+                if (existingUser != null)
+                {
+                    return BadRequest("Username is already taken.");
+                }
+                user.UserName = dto.Username;
+            }
+
+            if (!string.IsNullOrEmpty(dto.Email))
+            {
+                var setEmailResult = await _userManager.SetEmailAsync(user, dto.Email);
+                if (!setEmailResult.Succeeded)
+                {
+                    return BadRequest(setEmailResult.Errors);
+                }
+                // Ensure email is confirmed after update, if it was confirmed before.
+                // If you want to force re-confirmation for email changes, remove this line.
+                user.EmailConfirmed = true;
+            }
+
+            // Update other fields if provided
+            if (!string.IsNullOrEmpty(dto.FirstName)) user.FirstName = dto.FirstName;
+            if (!string.IsNullOrEmpty(dto.LastName)) user.LastName = dto.LastName;
+            if (!string.IsNullOrEmpty(dto.Bio)) user.Bio = dto.Bio;
+            
+            // Update photos even if they are null (to allow deletion)
+            Console.WriteLine($"[UsersController] Updating profile photo from '{user.ProfilePictureUrl}' to '{dto.ProfilePictureUrl}'");
+            Console.WriteLine($"[UsersController] Updating cover photo from '{user.CoverPhotoUrl}' to '{dto.CoverPhotoUrl}'");
+            
+            user.ProfilePictureUrl = dto.ProfilePictureUrl ?? "";
+            user.CoverPhotoUrl = dto.CoverPhotoUrl ?? "";
+
+            var updateResult = await _userManager.UpdateAsync(user);
+            if (!updateResult.Succeeded)
+            {
+                foreach (var error in updateResult.Errors)
+                {
+                    Console.WriteLine($"[UsersController] Update error: {error.Code} - {error.Description}");
+                }
+                return BadRequest(updateResult.Errors);
+            }
+
+            return NoContent();
+        }
+
+        // PUT /users/me/password
+        [HttpPut("me/password")]
+        [Authorize]
+        public async Task<IActionResult> ChangePassword([FromBody] ChangePasswordDto model)
+        {
+            try
+            {
+                Console.WriteLine("ChangePassword endpoint called");
+                var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+                if (string.IsNullOrEmpty(userId))
+                {
+                    Console.WriteLine("User ID not found in claims");
+                    return Unauthorized();
+                }
+
+                var user = await _userManager.FindByIdAsync(userId);
+                if (user == null)
+                {
+                    Console.WriteLine($"User not found with ID: {userId}");
+                    return NotFound("User not found");
+                }
+
+                Console.WriteLine("Verifying current password...");
+                var result = await _userManager.CheckPasswordAsync(user, model.CurrentPassword);
+                if (!result)
+                {
+                    Console.WriteLine("Current password verification failed");
+                    return BadRequest("Current password is incorrect");
+                }
+
+                if (model.NewPassword != model.ConfirmPassword)
+                {
+                    Console.WriteLine("New password and confirmation do not match");
+                    return BadRequest("New password and confirmation do not match");
+                }
+
+                Console.WriteLine("Changing password...");
+                var changeResult = await _userManager.ChangePasswordAsync(user, model.CurrentPassword, model.NewPassword);
+                if (!changeResult.Succeeded)
+                {
+                    Console.WriteLine("Password change failed. Errors: " + string.Join(", ", changeResult.Errors.Select(e => e.Description)));
+                    return BadRequest(changeResult.Errors);
+                }
+
+                Console.WriteLine("Password changed successfully");
+                return Ok(new { message = "Password changed successfully" });
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error in ChangePassword: {ex.Message}");
+                Console.WriteLine($"Stack trace: {ex.StackTrace}");
+                return StatusCode(500, "An error occurred while changing the password");
+            }
+        }
+
+        // GET /users/{id}/relationship
+        [HttpGet("{id}/relationship")]
+        [Authorize]
+        public async Task<IActionResult> GetRelationship(int id)
+        {
+            var currentUserId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier));
+            if (currentUserId == id)
+            {
+                // You can't follow or friend yourself
+                return Ok(new { isFollowing = false, isFriend = false });
+            }
+
+            // Use Follows table for isFollowing
+            var isFollowing = await _context.Follows.AnyAsync(f =>
+                f.FollowerId == currentUserId && f.FollowingId == id);
+
+            // Check if current user and target user are friends (bidirectional, accepted)
+            var isFriend = await _context.Friendships.AnyAsync(f =>
+                ((f.UserId == currentUserId && f.FriendId == id) ||
+                 (f.UserId == id && f.FriendId == currentUserId)) && f.Accepted);
+
+            return Ok(new { isFollowing, isFriend });
+        }
+
+        // POST /users/{id}/follow
+        [HttpPost("{id}/follow")]
+        [Authorize]
+        public async Task<IActionResult> FollowUser(int id)
+        {
+            var currentUserId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier));
+            if (currentUserId == id) return BadRequest("Cannot follow yourself.");
+
+            var alreadyFollowing = await _context.Follows.AnyAsync(f => f.FollowerId == currentUserId && f.FollowingId == id);
+            if (alreadyFollowing) return BadRequest("Already following.");
+
+            var follow = new Follow { FollowerId = currentUserId, FollowingId = id };
+            _context.Follows.Add(follow);
+            await _context.SaveChangesAsync();
+            return Ok();
+        }
+
+        // DELETE /users/{id}/follow
+        [HttpDelete("{id}/follow")]
+        [Authorize]
+        public async Task<IActionResult> UnfollowUser(int id)
+        {
+            var currentUserId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier));
+            var follow = await _context.Follows.FirstOrDefaultAsync(f => f.FollowerId == currentUserId && f.FollowingId == id);
+            if (follow == null) return NotFound();
+            _context.Follows.Remove(follow);
             await _context.SaveChangesAsync();
             return NoContent();
         }
     }
-} 
+}
