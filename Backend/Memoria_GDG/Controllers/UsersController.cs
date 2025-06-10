@@ -180,19 +180,22 @@ namespace Memoria_GDG.Controllers
             if (currentUserId == id)
             {
                 // You can't follow or friend yourself
-                return Ok(new { isFollowing = false, isFriend = false });
+                return Ok(new { isFollowing = false, isFriend = false, isBlocked = false, hasBlocked = false });
             }
 
+            // Check if either user has blocked the other
+            var isBlocked = await _context.Blocks.AnyAsync(b => b.BlockedId == currentUserId && b.BlockerId == id);
+            var hasBlocked = await _context.Blocks.AnyAsync(b => b.BlockerId == currentUserId && b.BlockedId == id);
+
             // Use Follows table for isFollowing
-            var isFollowing = await _context.Follows.AnyAsync(f =>
-                f.FollowerId == currentUserId && f.FollowingId == id);
+            var isFollowing = await _context.Follows.AnyAsync(f => f.FollowerId == currentUserId && f.FollowingId == id);
 
             // Check if current user and target user are friends (bidirectional, accepted)
             var isFriend = await _context.Friendships.AnyAsync(f =>
                 ((f.UserId == currentUserId && f.FriendId == id) ||
                  (f.UserId == id && f.FriendId == currentUserId)) && f.Accepted);
 
-            return Ok(new { isFollowing, isFriend });
+            return Ok(new { isFollowing, isFriend, isBlocked, hasBlocked });
         }
 
         // POST /users/{id}/follow
@@ -329,6 +332,36 @@ namespace Memoria_GDG.Controllers
                 .ToListAsync();
 
             return Ok(suggestedFriends);
+        }
+
+        // POST /users/{id}/block
+        [HttpPost("{id}/block")]
+        [Authorize]
+        public async Task<IActionResult> BlockUser(int id)
+        {
+            var currentUserId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier));
+            if (currentUserId == id) return BadRequest("Cannot block yourself.");
+
+            var alreadyBlocked = await _context.Blocks.AnyAsync(b => b.BlockerId == currentUserId && b.BlockedId == id);
+            if (alreadyBlocked) return BadRequest("Already blocked.");
+
+            var block = new Block { BlockerId = currentUserId, BlockedId = id };
+            _context.Blocks.Add(block);
+            await _context.SaveChangesAsync();
+            return Ok();
+        }
+
+        // DELETE /users/{id}/block
+        [HttpDelete("{id}/block")]
+        [Authorize]
+        public async Task<IActionResult> UnblockUser(int id)
+        {
+            var currentUserId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier));
+            var block = await _context.Blocks.FirstOrDefaultAsync(b => b.BlockerId == currentUserId && b.BlockedId == id);
+            if (block == null) return NotFound();
+            _context.Blocks.Remove(block);
+            await _context.SaveChangesAsync();
+            return NoContent();
         }
     }
 }

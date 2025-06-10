@@ -2,7 +2,7 @@ import { apiService } from './api';
 
 export interface Notification {
   id: string;
-  type: 'friend_request' | 'like' | 'time_capsule' | 'group_invite' | 'comment' | 'comment_like';
+  type: 'friend_request' | 'friend_request_accepted' | 'like' | 'time_capsule' | 'group_invite' | 'comment' | 'comment_like';
   text: string;
   read: boolean;
   userId?: string;

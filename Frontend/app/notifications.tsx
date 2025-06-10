@@ -10,6 +10,8 @@ const getNotificationIcon = (type: Notification['type'], colors: any) => {
   switch (type) {
     case 'friend_request':
       return <UserPlus color={colors.accent} size={24} />;
+    case 'friend_request_accepted':
+      return <Check color={colors.success} size={24} />;
     case 'like':
       return <Heart color={colors.accent} size={24} />;
     case 'time_capsule':
@@ -65,6 +67,7 @@ export default function NotificationsScreen() {
 
       switch (notification.type) {
         case 'friend_request':
+        case 'friend_request_accepted':
           if (notification.userId) {
             router.push({ pathname: '/profile', params: { username: String(notification.userId) } });
           }
