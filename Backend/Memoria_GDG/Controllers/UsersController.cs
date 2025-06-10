@@ -224,5 +224,51 @@ namespace Memoria_GDG.Controllers
             await _context.SaveChangesAsync();
             return NoContent();
         }
+
+        // GET /users/suggested-friends
+        [HttpGet("suggested-friends")]
+        [Authorize]
+        public async Task<IActionResult> GetSuggestedFriends()
+        {
+            var currentUserId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier));
+            
+            // Get current user's friends
+            var currentUserFriends = await _context.Friendships
+                .Where(f => (f.UserId == currentUserId || f.FriendId == currentUserId) && f.Accepted)
+                .Select(f => f.UserId == currentUserId ? f.FriendId : f.UserId)
+                .ToListAsync();
+
+            // Get friends of friends (excluding current user and existing friends)
+            var friendsOfFriends = await _context.Friendships
+                .Where(f => currentUserFriends.Contains(f.UserId) || currentUserFriends.Contains(f.FriendId))
+                .Where(f => f.Accepted)
+                .Select(f => f.UserId == currentUserId ? f.FriendId : f.UserId)
+                .Where(id => id != currentUserId && !currentUserFriends.Contains(id))
+                .ToListAsync();
+
+            // Count mutual friends for each potential friend
+            var suggestedFriendsWithCount = friendsOfFriends
+                .GroupBy(id => id)
+                .Select(g => new { UserId = g.Key, MutualFriendsCount = g.Count() })
+                .OrderByDescending(x => x.MutualFriendsCount)
+                .Take(10)
+                .ToList();
+
+            // Get user details for suggested friends
+            var suggestedFriends = await _context.Users
+                .Where(u => suggestedFriendsWithCount.Select(s => s.UserId).Contains(u.Id))
+                .Select(u => new
+                {
+                    id = u.Id,
+                    username = u.UserName,
+                    firstName = u.FirstName,
+                    lastName = u.LastName,
+                    profilePictureUrl = u.ProfilePictureUrl,
+                    mutualFriendsCount = suggestedFriendsWithCount.First(s => s.UserId == u.Id).MutualFriendsCount
+                })
+                .ToListAsync();
+
+            return Ok(suggestedFriends);
+        }
     }
 }
