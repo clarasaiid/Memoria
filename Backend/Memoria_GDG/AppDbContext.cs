@@ -21,4 +21,5 @@ public class AppDbContext : IdentityDbContext<User, IdentityRole<int>, int>
     public DbSet<GroupMessage> GroupMessages { get; set; }
     public DbSet<PendingRegistration> PendingRegistrations { get; set; }
     public DbSet<PasswordReset> PasswordResets { get; set; }
+    public DbSet<Follow> Follows { get; set; }
 }

@@ -14,13 +14,13 @@ namespace Memoria_GDG
         public string CoverPhotoUrl { get; set; } 
         public string Bio { get; set; }
 
-        public ICollection<Post> Posts { get; set; }
-        public ICollection<Comment> Comments { get; set; }
-        public ICollection<Reaction> Reactions { get; set; }
-        public ICollection<TimeCapsule> TimeCapsules { get; set; }
-        public ICollection<TimeCapsuleViewer> TimeCapsuleViewers { get; set; }
-        public ICollection<GroupMembership> GroupMemberships { get; set; }
-        public ICollection<Group> OwnedGroups { get; set; }
-        public ICollection<GroupMessage> GroupMessages { get; set; }
+        public ICollection<Post> Posts { get; set; } = new List<Post>();
+        public ICollection<Comment> Comments { get; set; } = new List<Comment>();
+        public ICollection<Reaction> Reactions { get; set; } = new List<Reaction>();
+        public ICollection<TimeCapsule> TimeCapsules { get; set; } = new List<TimeCapsule>();
+        public ICollection<TimeCapsuleViewer> TimeCapsuleViewers { get; set; } = new List<TimeCapsuleViewer>();
+        public ICollection<GroupMembership> GroupMemberships { get; set; } = new List<GroupMembership>();
+        public ICollection<Group> OwnedGroups { get; set; } = new List<Group>();
+        public ICollection<GroupMessage> GroupMessages { get; set; } = new List<GroupMessage>();
     }
 }

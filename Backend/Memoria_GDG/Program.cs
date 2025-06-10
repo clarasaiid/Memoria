@@ -51,6 +51,8 @@ builder.Services.AddIdentity<User, IdentityRole<int>>(options => {
 // Add Email Service
 builder.Services.AddScoped<IEmailService, EmailService>();
 
+
+
 // JWT Authentication Configuration
 var jwtSettings = builder.Configuration.GetSection("Jwt");
 var key = Encoding.UTF8.GetBytes(jwtSettings["Key"]);
@@ -82,7 +84,11 @@ builder.Services.ConfigureApplicationCookie(options =>
     options.AccessDeniedPath = "/auth/access-denied";
 });
 
-builder.Services.AddControllers();
+builder.Services.AddControllers()
+    .AddJsonOptions(options =>
+    {
+        options.JsonSerializerOptions.ReferenceHandler = System.Text.Json.Serialization.ReferenceHandler.IgnoreCycles;
+    });
 
 var app = builder.Build();
 
@@ -94,7 +100,8 @@ if (app.Environment.IsDevelopment())
 
 // app.UseHttpsRedirection(); // Make sure this is commented out for local dev
 app.UseRouting();
-app.UseCors("AllowLocalhost"); // Update the policy name here
+app.UseCors("AllowLocalhost");
+app.UseStaticFiles();
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();

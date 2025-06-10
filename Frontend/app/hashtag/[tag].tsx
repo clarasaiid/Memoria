@@ -2,41 +2,36 @@ import { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, FlatList, Image, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { ArrowLeft, Users, MessageCircle, Heart } from 'lucide-react-native';
+import { ArrowLeft } from 'lucide-react-native';
 import { useTheme } from '../../components/ThemeProvider';
 import { apiService } from '../services/api';
 
-export default function GroupScreen() {
-  const { id } = useLocalSearchParams();
+export default function HashtagScreen() {
+  const { tag } = useLocalSearchParams();
   const router = useRouter();
   const { colors } = useTheme();
   const [loading, setLoading] = useState(true);
-  const [group, setGroup] = useState<any>(null);
   const [posts, setPosts] = useState<any[]>([]);
   const [error, setError] = useState('');
 
   useEffect(() => {
-    const fetchGroupData = async () => {
+    const fetchPosts = async () => {
       setLoading(true);
       setError('');
       try {
-        const [groupData, postsData] = await Promise.all([
-          apiService.get(`/api/groups/${id}`),
-          apiService.get(`/api/groups/${id}/posts`)
-        ]);
-        setGroup(groupData);
-        setPosts(postsData);
+        const response = await apiService.get(`/api/posts/hashtag/${tag}`);
+        setPosts(response);
       } catch (e: any) {
-        setError('Failed to load group data');
+        setError('Failed to load posts');
       } finally {
         setLoading(false);
       }
     };
 
-    if (id) {
-      fetchGroupData();
+    if (tag) {
+      fetchPosts();
     }
-  }, [id]);
+  }, [tag]);
 
   const styles = StyleSheet.create({
     safeArea: {
@@ -54,42 +49,10 @@ export default function GroupScreen() {
       padding: 8,
       marginRight: 8,
     },
-    groupInfo: {
-      padding: 16,
-      borderBottomWidth: 1,
-      borderBottomColor: colors.border,
-    },
-    groupName: {
+    title: {
       fontSize: 24,
       fontWeight: 'bold',
       color: colors.primary,
-      marginBottom: 8,
-    },
-    groupDescription: {
-      fontSize: 16,
-      color: colors.text,
-      marginBottom: 12,
-    },
-    memberCount: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      marginBottom: 16,
-    },
-    memberCountText: {
-      fontSize: 14,
-      color: colors.textSecondary,
-      marginLeft: 8,
-    },
-    joinButton: {
-      backgroundColor: colors.primary,
-      paddingVertical: 8,
-      paddingHorizontal: 16,
-      borderRadius: 8,
-      alignSelf: 'flex-start',
-    },
-    joinButtonText: {
-      color: colors.buttonText,
-      fontWeight: '600',
     },
     postCard: {
       backgroundColor: colors.card,
@@ -126,20 +89,6 @@ export default function GroupScreen() {
       borderRadius: 8,
       marginBottom: 12,
     },
-    postActions: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      marginTop: 8,
-    },
-    actionButton: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      marginRight: 16,
-    },
-    actionText: {
-      marginLeft: 4,
-      color: colors.textSecondary,
-    },
     noPosts: {
       textAlign: 'center',
       padding: 20,
@@ -174,22 +123,11 @@ export default function GroupScreen() {
         <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
           <ArrowLeft size={24} color={colors.text} />
         </TouchableOpacity>
-        <Text style={styles.groupName}>{group?.name}</Text>
-      </View>
-
-      <View style={styles.groupInfo}>
-        <Text style={styles.groupDescription}>{group?.description}</Text>
-        <View style={styles.memberCount}>
-          <Users size={20} color={colors.textSecondary} />
-          <Text style={styles.memberCountText}>{group?.memberCount} members</Text>
-        </View>
-        <TouchableOpacity style={styles.joinButton}>
-          <Text style={styles.joinButtonText}>Join Group</Text>
-        </TouchableOpacity>
+        <Text style={styles.title}>#{tag}</Text>
       </View>
 
       {posts.length === 0 ? (
-        <Text style={styles.noPosts}>No posts in this group yet</Text>
+        <Text style={styles.noPosts}>No posts found with this hashtag</Text>
       ) : (
         <FlatList
           data={posts}
@@ -210,16 +148,6 @@ export default function GroupScreen() {
               {item.imageUrl && (
                 <Image source={{ uri: item.imageUrl }} style={styles.image} />
               )}
-              <View style={styles.postActions}>
-                <TouchableOpacity style={styles.actionButton}>
-                  <Heart size={20} color={colors.primary} />
-                  <Text style={styles.actionText}>{item.likeCount}</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.actionButton}>
-                  <MessageCircle size={20} color={colors.primary} />
-                  <Text style={styles.actionText}>{item.commentCount}</Text>
-                </TouchableOpacity>
-              </View>
             </View>
           )}
         />

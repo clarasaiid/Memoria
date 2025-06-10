@@ -20,6 +20,9 @@ namespace Memoria_GDG
 
             public ICollection<Comment> Comments { get; set; }
             public ICollection<Reaction> Reactions { get; set; }
+
+            public bool IsStory { get; set; }
+            public bool IsArchived { get; set; } // default: false
         }
 
     
