@@ -5,6 +5,7 @@ import { Heart, MessageCircle, Send, Bookmark as BookmarkSimple, MoreVertical, A
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { apiService } from '../services/api';
 import { useTheme } from '../../components/ThemeProvider';
+import FriendRequestButton from '../components/FriendRequestButton';
 import MessageButton from '../components/MessageButton';
 
 const COVER_HEIGHT = 220;
@@ -32,6 +33,8 @@ export default function PublicProfileScreen() {
   const [isLoadingAction, setIsLoadingAction] = useState(false);
   const [friendshipId, setFriendshipId] = useState<string | null>(null);
   const [pendingFriend, setPendingFriend] = useState(false);
+  const [incomingRequest, setIncomingRequest] = useState(false);
+  const [uiReady, setUiReady] = useState(false);
   const [isBlocked, setIsBlocked] = useState(false);
   const [hasBlocked, setHasBlocked] = useState(false);
   const insets = useSafeAreaInsets();
@@ -57,10 +60,14 @@ export default function PublicProfileScreen() {
       setIsFriend(relationshipRes.isFriend);
       setIsBlocked(relationshipRes.isBlocked);
       setHasBlocked(relationshipRes.hasBlocked);
-      // Pending friend request
+      // Pending friend request logic
       const requests = await apiService.get('/api/friend-requests') as any[];
-      const pending = requests.some((req: any) => (req.UserId === currentUser?.id && req.FriendId === res.id && !req.Accepted));
-      setPendingFriend(pending);
+      // Outgoing pending request: current user sent a request to this profile
+      const outgoingPending = requests.some((req: any) => req.UserId === currentUser?.id && req.FriendId === res.id && !req.Accepted);
+      setPendingFriend(outgoingPending);
+      // Incoming pending request: this profile sent a request to current user
+      const incomingPending = requests.some((req: any) => req.UserId === res.id && req.FriendId === currentUser?.id && !req.Accepted);
+      setIncomingRequest(incomingPending);
       // FriendshipId for removal
       const friendship = requests.find((f: any) =>
         ((f.UserId === res.id && f.FriendId === currentUser?.id) || (f.UserId === currentUser?.id && f.FriendId === res.id)) && f.Accepted
@@ -71,6 +78,7 @@ export default function PublicProfileScreen() {
       setProfile(null);
     } finally {
       setLoading(false);
+      setUiReady(true);
     }
   };
 
@@ -95,7 +103,8 @@ export default function PublicProfileScreen() {
         await apiService.post(`/users/${profile.id}/follow`, {});
         setIsFollowing(true);
       }
-      await fetchProfile();
+      setIsFollowing(!isFollowing);
+
     } catch (error) {
       console.error('Error toggling follow:', error);
     } finally {
@@ -111,7 +120,7 @@ export default function PublicProfileScreen() {
         await apiService.delete(`/api/friend-requests/${friendshipId}`);
         setIsFriend(false);
         setFriendshipId(null);
-      } else if (!isFriend && !pendingFriend) {
+      } else if (!isFriend && !pendingFriend && !incomingRequest) {
         const me = await apiService.get('/auth/me') as any;
         await apiService.post('/api/friend-requests', {
           UserId: me.profile.id,
@@ -119,6 +128,7 @@ export default function PublicProfileScreen() {
           Accepted: false
         });
         setPendingFriend(true);
+        setIncomingRequest(false);
       }
       await fetchProfile();
     } catch (error) {
@@ -159,13 +169,54 @@ export default function PublicProfileScreen() {
     return data;
   };
 
-  if (loading || !profile) {
+  // NEW: Accept/Decline handlers
+  const handleAcceptFriend = async () => {
+    if (!profile || isLoadingAction) return;
+    setIsLoadingAction(true);
+    try {
+      // Find the incoming request id
+      const requests = await apiService.get('/api/friend-requests') as any[];
+      const incoming = requests.find((req: any) => req.UserId === profile.id && req.FriendId === currentUser?.id && !req.Accepted);
+      if (incoming) {
+        await apiService.post(`/api/friend-requests/${incoming.id}/accept`, {});
+        setIsFriend(true);
+        setIncomingRequest(false);
+        setPendingFriend(false);
+      }
+      await fetchProfile();
+    } catch (error) {
+      console.error('Error accepting friend:', error);
+    } finally {
+      setIsLoadingAction(false);
+    }
+  };
+  const handleDeclineFriend = async () => {
+    if (!profile || isLoadingAction) return;
+    setIsLoadingAction(true);
+    try {
+      // Find the incoming request id
+      const requests = await apiService.get('/api/friend-requests') as any[];
+      const incoming = requests.find((req: any) => req.UserId === profile.id && req.FriendId === currentUser?.id && !req.Accepted);
+      if (incoming) {
+        await apiService.post(`/api/friend-requests/${incoming.id}/decline`, {});
+        setIncomingRequest(false);
+      }
+      await fetchProfile();
+    } catch (error) {
+      console.error('Error declining friend:', error);
+    } finally {
+      setIsLoadingAction(false);
+    }
+  };
+
+  if (loading || !uiReady || !profile) {
     return (
       <SafeAreaView style={{ flex: 1, backgroundColor: colors.background, justifyContent: 'center', alignItems: 'center' }}>
         <ActivityIndicator size="large" color={colors.primary} />
       </SafeAreaView>
     );
   }
+  
   if (error) return <View style={styles.center}><Text>{error}</Text></View>;
 
   return (
@@ -224,33 +275,52 @@ export default function PublicProfileScreen() {
               {!isOwnProfile && !isBlocked && !hasBlocked && (
                 <View style={{ flexDirection: 'row', gap: 12, marginTop: 16 }}>
                   {/* Follow/Unfollow */}
-                  <TouchableOpacity
-                    style={[
-                      styles.actionButton,
-                      { backgroundColor: isFollowing ? colors.primaryLight : colors.primary }
-                    ]}
-                    onPress={handleFollow}
-                    disabled={isLoadingAction}
-                  >
-                    {isFollowing ? <UserCheck color={colors.buttonText} size={20} /> : <UserPlus color={colors.buttonText} size={20} />}
-                    <Text style={{ color: isFollowing ? colors.text : colors.buttonText, fontWeight: 'bold', fontSize: 15, marginLeft: 6 }}>
-                      {isFollowing ? 'Unfollow' : 'Follow'}
-                    </Text>
-                  </TouchableOpacity>
-                  {/* Add Friend/Remove Friend/Pending/Friends */}
-                  <TouchableOpacity
-                    style={[
-                      styles.actionButton,
-                      { backgroundColor: isFriend ? colors.success : pendingFriend ? colors.warning : colors.primary }
-                    ]}
-                    onPress={handleFriend}
-                    disabled={isLoadingAction || pendingFriend}
-                  >
-                    {isFriend ? <UserCheck color={colors.buttonText} size={20} /> : pendingFriend ? <UserMinus color={colors.buttonText} size={20} /> : <UserPlus color={colors.buttonText} size={20} />}
-                    <Text style={{ color: isFriend || pendingFriend ? colors.buttonText : colors.buttonText, fontWeight: 'bold', fontSize: 15, marginLeft: 6 }}>
-                      {isFriend ? 'Remove Friend' : pendingFriend ? 'Pending' : 'Add Friend'}
-                    </Text>
-                  </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.button, { backgroundColor: isFollowing ? colors.primaryLight : colors.primary }]}
+                onPress={handleFollow}
+                disabled={isLoadingAction}
+              >
+                {isFollowing ? (
+                  <UserCheck color={colors.buttonText} size={20} />
+                ) : (
+                  <UserPlus color={colors.buttonText} size={20} />
+                )}
+                <Text
+                  style={{
+                    color: isFollowing ? colors.text : colors.buttonText,
+                    fontWeight: 'bold',
+                    fontSize: 14,
+                    marginLeft: 6,
+                  }}
+                >
+                  {isFollowing ? 'Unfollow' : 'Follow'}
+                </Text>
+              </TouchableOpacity>
+
+                  {/* Add Friend/Remove Friend/Pending/Friends/Accept/Decline */}
+                  {!isOwnProfile && (
+                  <FriendRequestButton targetUserId={profile.id} currentUser={currentUser} />
+                  )}
+
+                  {/* Accept/Decline buttons for incoming requests */}
+                  {incomingRequest && (
+                    <View style={{ flexDirection: 'row', gap: 8, marginLeft: 8 }}>
+                      <TouchableOpacity
+                        style={[styles.actionButton, { backgroundColor: colors.success }]}
+                        onPress={handleAcceptFriend}
+                        disabled={isLoadingAction}
+                      >
+                        <Text style={{ color: colors.buttonText, fontWeight: 'bold', fontSize: 15 }}>Accept</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={[styles.actionButton, { backgroundColor: colors.error }]}
+                        onPress={handleDeclineFriend}
+                        disabled={isLoadingAction}
+                      >
+                        <Text style={{ color: colors.buttonText, fontWeight: 'bold', fontSize: 15 }}>Decline</Text>
+                      </TouchableOpacity>
+                    </View>
+                  )}
                   {/* Message button only if friends */}
                   {isFriend && (
                     <MessageButton targetUserId={profile.id} targetUsername={profile.username} />
@@ -365,4 +435,14 @@ const styles = StyleSheet.create({
     padding: 7,
     borderRadius: 8,
   },
+  button: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    gap: 8,
+  },
+  
 }); 

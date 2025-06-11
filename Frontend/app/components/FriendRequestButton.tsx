@@ -1,74 +1,97 @@
-import React, { useState, useEffect } from 'react';
-import { TouchableOpacity, Text, StyleSheet, View } from 'react-native';
+import React, { useState, useEffect, useCallback } from 'react';
+import { TouchableOpacity, Text, StyleSheet, View, ActivityIndicator } from 'react-native';
 import { UserPlus, Check, UserMinus } from 'lucide-react-native';
 import { useTheme } from '@/components/ThemeProvider';
+import { useFocusEffect } from '@react-navigation/native';
 import { apiService } from '../services/api';
 
 interface FriendRequestButtonProps {
   targetUserId: number;
-  initialStatus?: 'none' | 'pending' | 'friends';
+  currentUser: any;
 }
 
-export default function FriendRequestButton({ targetUserId, initialStatus = 'none' }: FriendRequestButtonProps) {
-  const [status, setStatus] = useState<'none' | 'pending' | 'friends'>(initialStatus);
+export default function FriendRequestButton({ targetUserId, currentUser }: FriendRequestButtonProps) {
+  const [status, setStatus] = useState<'loading' | 'none' | 'pending' | 'incoming' | 'friends'>('loading');
   const [loading, setLoading] = useState(false);
-  const [currentUser, setCurrentUser] = useState<any>(null);
   const { colors } = useTheme();
-
-  useEffect(() => {
-    apiService.get('/auth/me').then((me: any) => setCurrentUser(me.profile));
-  }, []);
-
-  useEffect(() => {
-    if (currentUser) checkFriendshipStatus();
-    // eslint-disable-next-line
-  }, [targetUserId, currentUser]);
 
   const checkFriendshipStatus = async () => {
     try {
-      // First check if we're already friends
+      setStatus('loading');
       const response = await apiService.get(`/users/${targetUserId}/relationship`);
       if (response.isFriend) {
         setStatus('friends');
         return;
       }
 
-      // Then check for pending requests
       const requests = await apiService.get('/api/friend-requests');
-      const outgoingRequest = requests.some((req: any) =>
-        req.UserId === currentUser.id && req.FriendId === targetUserId && !req.Accepted
+      const outgoing = requests.find((req: any) =>
+        (req.userId || req.UserId) === currentUser.id &&
+        (req.friendId || req.FriendId) === targetUserId &&
+        !(req.accepted || req.Accepted)
       );
-      const incomingRequest = requests.some((req: any) =>
-        req.UserId === targetUserId && req.FriendId === currentUser.id && !req.Accepted
+      const incoming = requests.find((req: any) =>
+        (req.userId || req.UserId) === targetUserId &&
+        (req.friendId || req.FriendId) === currentUser.id &&
+        !(req.accepted || req.Accepted)
       );
 
-      if (outgoingRequest) {
-        setStatus('pending');
-      } else if (incomingRequest) {
-        setStatus('incoming');
-      } else {
-        setStatus('none');
-      }
+      if (outgoing) setStatus('pending');
+      else if (incoming) setStatus('incoming');
+      else setStatus('none');
     } catch (error) {
-      console.error('Error checking friendship status:', error);
+      console.error('Error checking friendship:', error);
+      setStatus('none');
     }
   };
+
+  useEffect(() => {
+    if (currentUser && targetUserId) checkFriendshipStatus();
+  }, [targetUserId]);
+
+  useFocusEffect(
+    useCallback(() => {
+      if (currentUser && targetUserId) checkFriendshipStatus();
+    }, [targetUserId, currentUser])
+  );
 
   const sendFriendRequest = async () => {
     try {
       setLoading(true);
-      await apiService.post('/api/friend-requests', {
+      const res = await apiService.post('/api/friend-requests', {
         UserId: currentUser.id,
         FriendId: targetUserId,
         Accepted: false
       });
-      setStatus('pending');
-    } catch (error: any) {
-      if (error?.response?.status === 400 && typeof error?.response?.data === 'string' && error.response.data.includes('already exists')) {
-        await checkFriendshipStatus();
+
+      if (res && res.id) {
+        setStatus('pending');
       } else {
-        console.error('Error sending friend request:', error);
+        setTimeout(() => checkFriendshipStatus(), 2000);
       }
+    } catch (error) {
+      console.error('Error sending friend request:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const revokeFriendRequest = async () => {
+    try {
+      setLoading(true);
+      const requests = await apiService.get('/api/friend-requests');
+      const outgoing = requests.find((req: any) =>
+        (req.userId || req.UserId) === currentUser.id &&
+        (req.friendId || req.FriendId) === targetUserId &&
+        !(req.accepted || req.Accepted)
+      );
+
+      if (outgoing) {
+        await apiService.delete(`/api/friend-requests/${outgoing.id}/revoke`);
+        setStatus('none');
+      }
+    } catch (error) {
+      console.error('Error revoking friend request:', error);
     } finally {
       setLoading(false);
     }
@@ -79,74 +102,89 @@ export default function FriendRequestButton({ targetUserId, initialStatus = 'non
       setLoading(true);
       const requests = await apiService.get('/api/friend-requests');
       const request = requests.find((req: any) =>
-        req.UserId === targetUserId && req.FriendId === currentUser.id && !req.Accepted
+        (req.userId || req.UserId) === targetUserId &&
+        (req.friendId || req.FriendId) === currentUser.id &&
+        !(req.accepted || req.Accepted)
       );
-      
       if (request) {
         await apiService.put(`/api/friend-requests/${request.id}`, { accept });
         setStatus(accept ? 'friends' : 'none');
       }
     } catch (error) {
-      console.error('Error handling friend request:', error);
+      console.error('Error handling incoming friend request:', error);
     } finally {
       setLoading(false);
     }
   };
 
-  const getButtonContent = () => {
-    switch (status) {
-      case 'friends':
-        return (
-          <View style={[styles.button, { backgroundColor: colors.success }]}> 
-            <Check color={colors.buttonText} size={20} />
-            <Text style={[styles.text, { color: colors.buttonText }]}>Friends</Text>
-          </View>
-        );
-      case 'pending':
-        return (
-          <View style={[styles.button, { backgroundColor: colors.warning }]}> 
-            <UserMinus color={colors.buttonText} size={20} />
-            <Text style={[styles.text, { color: colors.buttonText }]}>Pending</Text>
-          </View>
-        );
-      case 'incoming':
-        return (
-          <View style={styles.incomingContainer}>
-            <TouchableOpacity
-              style={[styles.incomingButton, { backgroundColor: colors.success }]}
-              onPress={() => handleIncomingRequest(true)}
-              disabled={loading}
-            >
-              <Check color={colors.buttonText} size={20} />
-              <Text style={[styles.text, { color: colors.buttonText }]}>Accept</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.incomingButton, { backgroundColor: colors.error }]}
-              onPress={() => handleIncomingRequest(false)}
-              disabled={loading}
-            >
-              <UserMinus color={colors.buttonText} size={20} />
-              <Text style={[styles.text, { color: colors.buttonText }]}>Decline</Text>
-            </TouchableOpacity>
-          </View>
-        );
-      default:
-        return (
-          <TouchableOpacity
-            style={[styles.button, { backgroundColor: colors.primary }]}
-            onPress={sendFriendRequest}
-            disabled={loading}
-          >
-            <UserPlus color={colors.buttonText} size={20} />
-            <Text style={[styles.text, { color: colors.buttonText }]}> 
-              {loading ? 'Sending...' : 'Add Friend'}
-            </Text>
-          </TouchableOpacity>
-        );
-    }
-  };
+  if (!currentUser || status === 'loading') {
+    return (
+      <View style={[styles.button, { backgroundColor: colors.card, opacity: 0.5 }]}>
+        <ActivityIndicator size="small" color={colors.textSecondary} />
+      </View>
+    );
+  }
 
-  return getButtonContent();
+  if (loading) {
+    return (
+      <View style={[styles.button, { backgroundColor: colors.primary }]}>
+        <ActivityIndicator size="small" color={colors.buttonText} />
+      </View>
+    );
+  }
+
+  switch (status) {
+    case 'friends':
+      return (
+        <View style={[styles.button, { backgroundColor: colors.success }]}>
+          <Check color={colors.buttonText} size={20} />
+          <Text style={[styles.text, { color: colors.buttonText }]}>Friends</Text>
+        </View>
+      );
+
+    case 'pending':
+      return (
+        <TouchableOpacity
+          style={[styles.button, { backgroundColor: colors.warning }]}
+          onPress={revokeFriendRequest}
+        >
+          <UserMinus color={colors.buttonText} size={20} />
+          <Text style={[styles.text, { color: colors.buttonText }]}>Cancel Request</Text>
+        </TouchableOpacity>
+      );
+
+    case 'incoming':
+      return (
+        <View style={styles.incomingContainer}>
+          <TouchableOpacity
+            style={[styles.incomingButton, { backgroundColor: colors.success }]}
+            onPress={() => handleIncomingRequest(true)}
+          >
+            <Check color={colors.buttonText} size={20} />
+            <Text style={[styles.text, { color: colors.buttonText }]}>Accept</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.incomingButton, { backgroundColor: colors.error }]}
+            onPress={() => handleIncomingRequest(false)}
+          >
+            <UserMinus color={colors.buttonText} size={20} />
+            <Text style={[styles.text, { color: colors.buttonText }]}>Decline</Text>
+          </TouchableOpacity>
+        </View>
+      );
+
+    case 'none':
+    default:
+      return (
+        <TouchableOpacity
+          style={[styles.button, { backgroundColor: colors.primary }]}
+          onPress={sendFriendRequest}
+        >
+          <UserPlus color={colors.buttonText} size={20} />
+          <Text style={[styles.text, { color: colors.buttonText }]}>Add Friend</Text>
+        </TouchableOpacity>
+      );
+  }
 }
 
 const styles = StyleSheet.create({
@@ -176,4 +214,4 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     gap: 6,
   },
-}); 
+});

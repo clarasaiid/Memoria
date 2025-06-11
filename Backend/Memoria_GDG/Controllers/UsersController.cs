@@ -7,6 +7,8 @@ using Microsoft.AspNetCore.Authorization;
 using System.Security.Claims;
 using Memoria_GDG.Dtos;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.SignalR;
+using Memoria_GDG.Hubs;
 
 namespace Memoria_GDG.Controllers
 {
@@ -16,11 +18,13 @@ namespace Memoria_GDG.Controllers
     {
         private readonly AppDbContext _context;
         private readonly UserManager<User> _userManager;
+        private readonly IHubContext<ChatHub> _hubContext;
 
-        public UsersController(AppDbContext context, UserManager<User> userManager)
+        public UsersController(AppDbContext context, UserManager<User> userManager, IHubContext<ChatHub> hubContext)
         {
             _context = context;
             _userManager = userManager;
+            _hubContext = hubContext;
         }
 
         // GET /users
@@ -212,6 +216,66 @@ namespace Memoria_GDG.Controllers
             var follow = new Follow { FollowerId = currentUserId, FollowingId = id };
             _context.Follows.Add(follow);
             await _context.SaveChangesAsync();
+
+            var followedUser = await _context.Users.FindAsync(id);
+            var follower = await _context.Users.FindAsync(currentUserId);
+            if (follower == null) return NotFound("Follower not found");
+            var fullName = $"{follower.FirstName ?? ""} {follower.LastName ?? ""}".Trim();
+            if (string.IsNullOrWhiteSpace(fullName)) fullName = "Unknown";
+            var username = follower.UserName ?? "";
+            if (string.IsNullOrWhiteSpace(username)) username = "unknown";
+            if (followedUser != null) {
+                if (!followedUser.IsPrivate) {
+                    // Public: create follow notification
+                    Console.WriteLine($"[DEBUG] Creating follow notification for user {id} from follower {currentUserId}");
+                    var notification = new Notification
+                    {
+                        Type = "follow",
+                        Source = "user",
+                        UserId = id,
+                        SenderId = currentUserId,
+                        Text = $"{fullName} (@{username}) started following you",
+                        SenderAvatarUrl = follower.ProfilePictureUrl ?? string.Empty,
+                        SenderFullName = fullName,
+                        SenderUsername = username,
+                        Read = false,
+                        CreatedAt = DateTime.UtcNow
+                    };
+                    _context.Notifications.Add(notification);
+                    try {
+                        await _context.SaveChangesAsync();
+                        Console.WriteLine($"[DEBUG] Saved follow notification for user {id}");
+                    } catch (Exception ex) {
+                        Console.WriteLine($"[ERROR] Failed to save follow notification: {ex.Message}");
+                    }
+                    await _hubContext.Clients.User(id.ToString()).SendAsync("ReceiveNotification", notification);
+                } else {
+                    // Private: create follow request notification
+                    Console.WriteLine($"[DEBUG] Creating follow request notification for user {id} from follower {currentUserId}");
+                    var notification = new Notification
+                    {
+                        Type = "follow_request",
+                        Source = "user",
+                        UserId = id,
+                        SenderId = currentUserId,
+                        Text = $"{fullName} (@{username}) wants to follow you",
+                        SenderAvatarUrl = follower.ProfilePictureUrl ?? string.Empty,
+                        SenderFullName = fullName,
+                        SenderUsername = username,
+                        Read = false,
+                        CreatedAt = DateTime.UtcNow
+                    };
+                    _context.Notifications.Add(notification);
+                    try {
+                        await _context.SaveChangesAsync();
+                        Console.WriteLine($"[DEBUG] Saved follow request notification for user {id}");
+                    } catch (Exception ex) {
+                        Console.WriteLine($"[ERROR] Failed to save follow request notification: {ex.Message}");
+                    }
+                    await _hubContext.Clients.User(id.ToString()).SendAsync("ReceiveNotification", notification);
+                }
+            }
+
             return Ok();
         }
 
@@ -287,6 +351,87 @@ namespace Memoria_GDG.Controllers
                 .ToListAsync();
             return Ok(friends);
         }
+
+        [HttpGet("me/follow-requests")]
+        [Authorize]
+        public async Task<IActionResult> GetIncomingFollowRequests()
+        {
+            var userId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier));
+            var user = await _context.Users.FindAsync(userId);
+            if (user == null || !user.IsPrivate)
+                return Unauthorized("This endpoint is for private accounts only.");
+
+            var requests = await _context.Follows
+                .Include(f => f.Follower)
+                .Where(f => f.FollowingId == userId && !f.Approved)
+                .Select(f => new {
+                    id = f.Id,
+                    type = "follow",
+                    text = $"{f.Follower.FirstName} {f.Follower.LastName} (@{f.Follower.UserName}) wants to follow you",
+                    userId = f.FollowerId,
+                    avatarUrl = f.Follower.ProfilePictureUrl,
+                    read = false
+                })
+                .ToListAsync();
+
+            return Ok(requests);
+        }
+
+        [HttpPost("follow-requests/{id}/accept")]
+        [Authorize]
+        public async Task<IActionResult> AcceptFollowRequest(int id)
+        {
+            var follow = await _context.Follows.FindAsync(id);
+            var userId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier));
+            
+            if (follow == null || follow.FollowingId != userId || follow.Approved)
+                return NotFound();
+
+            follow.Approved = true;
+            await _context.SaveChangesAsync();
+
+            // Create follow notification (for private accounts)
+            var follower = await _context.Users.FindAsync(follow.FollowerId);
+            var fullName = $"{follower.FirstName ?? ""} {follower.LastName ?? ""}".Trim();
+            if (string.IsNullOrWhiteSpace(fullName)) fullName = "Unknown";
+            var username = follower.UserName ?? "";
+            if (string.IsNullOrWhiteSpace(username)) username = "unknown";
+            var notification = new Notification
+            {
+                Type = "follow",
+                Source = "user",
+                UserId = userId, // the user being followed
+                SenderId = follow.FollowerId,
+                Text = $"{fullName} (@{username}) started following you",
+                SenderAvatarUrl = follower.ProfilePictureUrl,
+                SenderFullName = fullName,
+                SenderUsername = username,
+                Read = false,
+                CreatedAt = DateTime.UtcNow
+            };
+            _context.Notifications.Add(notification);
+            await _context.SaveChangesAsync();
+            // Broadcast to the followed user
+            await _hubContext.Clients.User(userId.ToString()).SendAsync("ReceiveNotification", notification);
+
+            return NoContent();
+        }
+
+        [HttpPost("follow-requests/{id}/decline")]
+        [Authorize]
+        public async Task<IActionResult> DeclineFollowRequest(int id)
+        {
+            var follow = await _context.Follows.FindAsync(id);
+            var userId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier));
+            
+            if (follow == null || follow.FollowingId != userId || follow.Approved)
+                return NotFound();
+
+            _context.Follows.Remove(follow);
+            await _context.SaveChangesAsync();
+            return NoContent();
+        }   
+
 
         // GET /users/suggested-friends
         [HttpGet("suggested-friends")]

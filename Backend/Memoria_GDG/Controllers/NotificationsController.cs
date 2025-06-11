@@ -3,11 +3,15 @@ using Microsoft.EntityFrameworkCore;
 using Memoria_GDG;
 using System.Threading.Tasks;
 using System.Collections.Generic;
+using Microsoft.AspNetCore.Authorization;
+using System.Security.Claims;
+
 
 namespace Memoria_GDG.Controllers
 {
     [ApiController]
     [Route("api/notifications")]
+    [Authorize]
     public class NotificationsController : ControllerBase
     {
         private readonly AppDbContext _context;
@@ -22,6 +26,22 @@ namespace Memoria_GDG.Controllers
         {
             return await _context.Notifications.Include(n => n.User).ToListAsync();
         }
+        
+        // GET /api/notifications/me
+        [HttpGet("me")]
+        [Authorize]
+        public async Task<ActionResult<IEnumerable<Notification>>> GetMyNotifications()
+        {
+            var userId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier));
+            
+            var myNotifications = await _context.Notifications
+                .Where(n => n.UserId == userId)
+                .OrderByDescending(n => n.CreatedAt)
+                .ToListAsync();
+
+            return Ok(myNotifications);
+        }
+
 
         // GET /notifications/{id}
         [HttpGet("{id}")]
@@ -78,9 +98,11 @@ namespace Memoria_GDG.Controllers
         {
             var notification = await _context.Notifications.FindAsync(id);
             if (notification == null) return NotFound();
+
             notification.Read = true;
             await _context.SaveChangesAsync();
             return NoContent();
         }
+
     }
 } 
