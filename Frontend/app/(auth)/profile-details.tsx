@@ -42,7 +42,7 @@ export default function ProfileDetailsScreen() {
     if (profileImage) profilePictureUrl = await uploadImage(profileImage);
     if (coverImage) coverPhotoUrl = await uploadImage(coverImage);
     try {
-      await apiService.post('/auth/profile-setup', {
+      await apiService.post('/api/auth/profile-setup', {
         username: params.username,
         email: params.email,
         bio: bio || undefined,

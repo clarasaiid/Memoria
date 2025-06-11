@@ -2,39 +2,83 @@ import { View, Text, StyleSheet, TextInput, TouchableOpacity, FlatList, Image } 
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ArrowLeft, Send } from 'lucide-react-native';
 import { router, useLocalSearchParams } from 'expo-router';
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useTheme } from '../../components/ThemeProvider';
+import { apiService } from '../services/api';
+import * as SignalR from '@microsoft/signalr';
 
 export default function ConversationScreen() {
-  const { id } = useLocalSearchParams();
+  const { id, username } = useLocalSearchParams();
   const [message, setMessage] = useState('');
+  const [messages, setMessages] = useState<any[]>([]);
   const { colors } = useTheme();
+  const [currentUserId, setCurrentUserId] = useState<number | null>(null);
+  const [otherUser, setOtherUser] = useState<any>(null);
+  const [otherUserOnline, setOtherUserOnline] = useState<boolean>(false);
+  const hubConnection = useRef<SignalR.HubConnection | null>(null);
 
-  // Mock messages data
-  const messages = [
-    {
-      id: 1,
-      text: 'Hey! How are you?',
-      sender: 'them',
-      timestamp: '10:30 AM'
-    },
-    {
-      id: 2,
-      text: 'I\'m good, thanks! How about you?',
-      sender: 'me',
-      timestamp: '10:31 AM'
-    },
-    {
-      id: 3,
-      text: 'I sent you a time capsule! It will open on your birthday 🎁',
-      sender: 'them',
-      timestamp: '10:32 AM'
-    }
-  ];
+  // Fetch current user, messages, and other user info
+  useEffect(() => {
+    apiService.get('/api/auth/me').then((me: any) => {
+      setCurrentUserId(me.profile.id);
+      // Fetch messages between current user and conversation partner
+      apiService.get(`/api/messages/between/${me.profile.id}/${id}`).then((msgs: unknown) => {
+        setMessages(msgs as any[]);
+      });
+      // Fetch other user's info
+      apiService.get(`/api/users/username/${username}`).then((user: any) => {
+        setOtherUser(user);
+      });
+    });
+  }, [id, username]);
+
+  // Setup SignalR connection
+  useEffect(() => {
+    if (!currentUserId) return;
+    const token = localStorage.getItem('token');
+    const connection = new SignalR.HubConnectionBuilder()
+      .withUrl('http://localhost:7000/chatHub', {
+        accessTokenFactory: () => token || ''
+      })
+      .withAutomaticReconnect()
+      .build();
+    hubConnection.current = connection;
+    connection.start().then(async () => {
+      // Check initial online status
+      if (otherUser?.id) {
+        const isOnline = await connection.invoke('IsUserOnline', otherUser.id);
+        setOtherUserOnline(isOnline);
+      }
+    });
+    connection.on('ReceivePrivateMessage', (msg: any) => {
+      // Only add if relevant to this conversation
+      if ((msg.SenderId === currentUserId && msg.ReceiverId == id) ||
+          (msg.SenderId == id && msg.ReceiverId === currentUserId)) {
+        setMessages(prev => [...prev, msg]);
+      }
+    });
+    connection.on('UserStatusChanged', (userId: number, isOnline: boolean) => {
+      if (otherUser && userId === otherUser.id) {
+        setOtherUserOnline(isOnline);
+      }
+    });
+    return () => {
+      connection.stop();
+    };
+  }, [currentUserId, id, otherUser]);
 
   const handleSend = () => {
-    if (message.trim()) {
-      // TODO: Implement message sending
+    if (message.trim() && hubConnection.current && currentUserId) {
+      // Optimistically add the message to the UI
+      const newMsg = {
+        id: Date.now(),
+        SenderId: currentUserId,
+        ReceiverId: Number(id),
+        Text: message,
+        SentAt: new Date().toISOString(),
+      };
+      setMessages(prev => [...prev, newMsg]);
+      hubConnection.current.invoke('SendPrivateMessage', currentUserId, Number(id), message);
       setMessage('');
     }
   };
@@ -47,13 +91,15 @@ export default function ConversationScreen() {
           <TouchableOpacity onPress={() => router.back()} style={{ marginRight: 16 }}>
             <ArrowLeft size={24} color={colors.text} />
           </TouchableOpacity>
-          <Image 
-            source={{ uri: 'https://images.pexels.com/photos/774909/pexels-photo-774909.jpeg' }} 
-            style={{ width: 40, height: 40, borderRadius: 20, marginRight: 12 }} 
+          <Image
+            source={{ uri: otherUser?.profilePictureUrl || 'https://ui-avatars.com/api/?name=' + (otherUser?.userName || otherUser?.username || '') }}
+            style={{ width: 40, height: 40, borderRadius: 20, marginRight: 12 }}
           />
           <View>
-            <Text style={{ fontFamily: 'Inter-Bold', fontSize: 16, color: colors.text }}>Sarah Johnson</Text>
-            <Text style={{ fontFamily: 'Inter-Regular', fontSize: 12, color: colors.textSecondary }}>Online</Text>
+            <Text style={{ fontFamily: 'Inter-Bold', fontSize: 16, color: colors.text }}>{otherUser?.userName || otherUser?.username || 'User'}</Text>
+            <Text style={{ fontFamily: 'Inter-Regular', fontSize: 12, color: colors.textSecondary }}>
+              {otherUserOnline ? 'Online' : 'Offline'}
+            </Text>
           </View>
         </View>
 
@@ -64,23 +110,23 @@ export default function ConversationScreen() {
           contentContainerStyle={{ padding: 16 }}
           renderItem={({ item }) => (
             <View style={{ 
-              alignSelf: item.sender === 'me' ? 'flex-end' : 'flex-start',
+              alignSelf: item.SenderId === currentUserId ? 'flex-end' : 'flex-start',
               maxWidth: '80%',
               marginBottom: 16
             }}>
               <View style={{ 
-                backgroundColor: item.sender === 'me' ? colors.primary : colors.card,
+                backgroundColor: item.SenderId === currentUserId ? colors.primary : colors.card,
                 padding: 12,
                 borderRadius: 16,
-                borderTopRightRadius: item.sender === 'me' ? 4 : 16,
-                borderTopLeftRadius: item.sender === 'me' ? 16 : 4,
+                borderTopRightRadius: item.SenderId === currentUserId ? 4 : 16,
+                borderTopLeftRadius: item.SenderId === currentUserId ? 16 : 4,
               }}>
                 <Text style={{ 
                   fontFamily: 'Inter-Regular', 
                   fontSize: 16, 
-                  color: item.sender === 'me' ? colors.buttonText : colors.text 
+                  color: item.SenderId === currentUserId ? colors.buttonText : colors.text 
                 }}>
-                  {item.text}
+                  {item.Text}
                 </Text>
               </View>
               <Text style={{ 
@@ -88,9 +134,9 @@ export default function ConversationScreen() {
                 fontSize: 12, 
                 color: colors.textSecondary,
                 marginTop: 4,
-                alignSelf: item.sender === 'me' ? 'flex-end' : 'flex-start'
+                alignSelf: item.SenderId === currentUserId ? 'flex-end' : 'flex-start'
               }}>
-                {item.timestamp}
+                {new Date(item.SentAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
               </Text>
             </View>
           )}

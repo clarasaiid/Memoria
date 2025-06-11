@@ -1,8 +1,9 @@
 import { useLocalSearchParams, router } from 'expo-router';
 import { View, Text, StyleSheet, Image, TouchableOpacity, ScrollView, TextInput, Platform, useWindowDimensions, ActivityIndicator } from 'react-native';
 import { useEffect, useState } from 'react';
-import { ArrowLeft } from 'lucide-react-native';
+import { ArrowLeft, Heart, MessageCircle } from 'lucide-react-native';
 import { apiService } from '../services/api';
+import { usePostInteractions } from '../../hooks/usePostInteractions';
 
 export default function PostDetails() {
   const { id } = useLocalSearchParams();
@@ -10,8 +11,17 @@ export default function PostDetails() {
   const [post, setPost] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [comment, setComment] = useState('');
-  const [comments, setComments] = useState<any[]>([]);
   const isLarge = width > 700;
+
+  const {
+    isLiked,
+    likeCount,
+    comments,
+    isLoading: interactionsLoading,
+    fetchPostInteractions,
+    toggleLike,
+    addComment
+  } = usePostInteractions(Number(id));
 
   useEffect(() => {
     const fetchPost = async () => {
@@ -19,7 +29,7 @@ export default function PostDetails() {
       try {
         const res = await apiService.get(`/api/posts/${id}`);
         setPost(res);
-        setComments(res.comments || []);
+        await fetchPostInteractions();
       } catch (e) {
         setPost(null);
       } finally {
@@ -29,7 +39,7 @@ export default function PostDetails() {
     if (id) fetchPost();
   }, [id]);
 
-  if (loading) {
+  if (loading || interactionsLoading) {
     return <View style={styles.centered}><ActivityIndicator size="large" /></View>;
   }
 
@@ -39,10 +49,14 @@ export default function PostDetails() {
     );
   }
 
-  const handleAddComment = () => {
+  const handleAddComment = async () => {
     if (comment.trim()) {
-      setComments([{ id: Date.now(), username: post.user?.userName || 'You', text: comment }, ...comments]);
-      setComment('');
+      try {
+        await addComment(comment.trim());
+        setComment('');
+      } catch (error) {
+        console.error('Error adding comment:', error);
+      }
     }
   };
 
@@ -60,7 +74,7 @@ export default function PostDetails() {
           <View style={styles.infoInner}>
             {/* Header */}
             <View style={styles.headerRow}>
-              <TouchableOpacity onPress={() => router.push('/(tabs)/profile')} style={styles.backBtn}>
+              <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
                 <ArrowLeft size={24} color="#222" />
               </TouchableOpacity>
               <Image source={{ uri: post.user?.profilePictureUrl || `https://ui-avatars.com/api/?name=${post.user?.userName}` }} style={styles.avatar} />
@@ -68,26 +82,33 @@ export default function PostDetails() {
             </View>
             {/* Likes/Caption */}
             <View style={styles.likesRow}>
-              <Text style={styles.likesText}>{post.reactions?.length || 0} likes</Text>
+              <Text style={styles.likesText}>{likeCount} likes</Text>
             </View>
             <View style={styles.captionRow}>
               <Text style={styles.captionUsername}>{post.user?.userName}</Text>
               <Text style={styles.captionText}> {post.content}</Text>
             </View>
             {/* Comments */}
-            <View style={styles.commentsListWrap}>
-              <ScrollView style={styles.commentsList} contentContainerStyle={{ paddingBottom: 10 }}>
-                {comments.length === 0 && <Text style={styles.noComments}>No comments yet.</Text>}
-                {comments.map((c) => (
-                  <View key={c.id} style={styles.commentItem}>
-                    <Text style={styles.commentUsername}>{c.username}</Text>
-                    <Text style={styles.commentText}> {c.text}</Text>
-                  </View>
-                ))}
-              </ScrollView>
-            </View>
+            <ScrollView style={styles.commentsList} contentContainerStyle={{ paddingBottom: 10 }}>
+              {comments.length === 0 && <Text style={styles.noComments}>No comments yet.</Text>}
+              {comments.map((c) => (
+                <View key={c.id} style={styles.commentItem}>
+                  <Text style={styles.commentUsername}>{c.username}</Text>
+                  <Text style={styles.commentText}> {c.content}</Text>
+                </View>
+              ))}
+            </ScrollView>
           </View>
-          {/* Add Comment (always at bottom) */}
+          {/* Actions */}
+          <View style={styles.actionsRow}>
+            <TouchableOpacity onPress={toggleLike} style={styles.actionButton}>
+              <Heart size={24} color={isLiked ? '#ff4d4d' : '#222'} fill={isLiked ? '#ff4d4d' : 'none'} />
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.actionButton}>
+              <MessageCircle size={24} color="#222" />
+            </TouchableOpacity>
+          </View>
+          {/* Add Comment */}
           <View style={styles.addCommentRow}>
             <TextInput
               style={styles.commentInput}
@@ -127,13 +148,14 @@ const styles = StyleSheet.create({
   captionRow: { flexDirection: 'row', marginBottom: 10, flexWrap: 'wrap' },
   captionUsername: { fontWeight: 'bold', color: '#222' },
   captionText: { color: '#222' },
-  commentsListWrap: { flex: 1, minHeight: 120, maxHeight: 180, marginBottom: 8 },
-  commentsList: { flex: 1 },
+  commentsList: { flex: 1, minHeight: 120, maxHeight: 180, marginBottom: 8 },
   noComments: { color: '#888', fontSize: 15, marginBottom: 8 },
   commentItem: { flexDirection: 'row', marginBottom: 6 },
   commentUsername: { fontWeight: 'bold', color: '#222' },
   commentText: { color: '#222' },
-  addCommentRow: { flexDirection: 'row', alignItems: 'center', borderTopWidth: 1, borderTopColor: '#eee', paddingTop: 1, backgroundColor: '#fff' },
+  actionsRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 8, borderTopWidth: 1, borderTopColor: '#eee' },
+  actionButton: { marginRight: 16 },
+  addCommentRow: { flexDirection: 'row', alignItems: 'center', borderTopWidth: 1, borderTopColor: '#eee', paddingTop: 8, backgroundColor: '#fff' },
   commentInput: { flex: 1, fontSize: 15, color: '#222', padding: 8, backgroundColor: '#f3f3f3', borderRadius: 8, marginRight: 8 },
   postBtn: { paddingHorizontal: 12, paddingVertical: 8, backgroundColor: '#A78BFA', borderRadius: 8 },
   postBtnText: { color: '#fff', fontWeight: 'bold' },

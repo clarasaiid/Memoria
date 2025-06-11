@@ -20,7 +20,7 @@ export default function VerifyEmailScreen() {
   const verifyEmail = async (token: string) => {
     setLoading(true);
     try {
-      const res = await apiService.get(`/auth/confirm-email?token=${token}`);
+      const res = await apiService.get<{ token?: string }>(`/api/auth/confirm-email?token=${token}`);
       if (res.token) {
         apiService.setToken(res.token);
         setMessage('Email verified successfully! You can now set up your profile.');
@@ -46,7 +46,7 @@ export default function VerifyEmailScreen() {
 
     setLoading(true);
     try {
-      await apiService.post('/auth/resend-verification', { email });
+      await apiService.post('/api/auth/resend-verification', { email });
       setMessage('Verification email resent! Please check your inbox.');
     } catch (error: any) {
       setMessage(error.response?.data || 'Failed to resend email.');

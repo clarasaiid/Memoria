@@ -1,7 +1,5 @@
 import { Platform } from 'react-native';
 import axios, { AxiosError, AxiosInstance } from 'axios';
-
-// ✅ Declare the base URL at the top (remove `/api` from it)
 const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:7000';
 
 console.log('API_BASE_URL:', API_BASE_URL);

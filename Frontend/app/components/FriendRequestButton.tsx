@@ -85,7 +85,7 @@ export default function FriendRequestButton({ targetUserId, currentUser }: Frien
         !(req.accepted || req.Accepted)
       );
       if (outgoing && typeof outgoing === 'object' && 'id' in outgoing) {
-        await apiService.delete(`/api/friendships/${outgoing.id}/revoke`);
+        await apiService.delete(`/api/friendships/${outgoing.id}`);
         setStatus('none');
       }
     } catch (error) {

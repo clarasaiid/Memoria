@@ -135,13 +135,15 @@ export default function NotificationsScreen() {
     }
   };
 
-  const handleFriendRequest = async (requestId: string, accept: boolean) => {
+  const handleFriendRequest = async (request: Notification, accept: boolean) => {
     try {
-      await notificationsService.handleFriendRequest(requestId, accept);
-      setFriendRequests(prev => prev.filter(req => req.id !== requestId));
+      // Use postId (friendship id) if available, else fallback to id
+      const friendshipId = request.postId || request.id;
+      await notificationsService.handleFriendRequest(String(friendshipId), accept);
+      setFriendRequests(prev => prev.filter(req => req.id !== request.id));
       if (accept) {
         setNotifications(prev =>
-          prev.filter(n => !(n.type === 'friend_request' && n.userId === requestId))
+          prev.filter(n => !(n.type === 'friend_request' && n.id === request.id))
         );
       }
     } catch (err) {
@@ -252,7 +254,7 @@ export default function NotificationsScreen() {
                 justifyContent: 'center',
                 alignItems: 'center',
               }}
-              onPress={() => handleFriendRequest(friendRequestId, true)}
+              onPress={() => handleFriendRequest(notif as Notification, true)}
             >
               <Check color="white" size={20} />
             </TouchableOpacity>
@@ -265,7 +267,7 @@ export default function NotificationsScreen() {
                 justifyContent: 'center',
                 alignItems: 'center',
               }}
-              onPress={() => handleFriendRequest(friendRequestId, false)}
+              onPress={() => handleFriendRequest(notif as Notification, false)}
             >
               <X color="white" size={20} />
             </TouchableOpacity>
@@ -278,13 +280,15 @@ export default function NotificationsScreen() {
   // Helper function to format time ago
   const formatTimeAgo = (date: Date) => {
     const now = new Date();
-    const diffInSeconds = Math.floor((now.getTime() - date.getTime()) / 1000);
+    // Convert UTC to local time
+    const localDate = new Date(date.getTime() - date.getTimezoneOffset() * 60000);
+    const diffInSeconds = Math.floor((now.getTime() - localDate.getTime()) / 1000);
 
     if (diffInSeconds < 60) return 'just now';
     if (diffInSeconds < 3600) return `${Math.floor(diffInSeconds / 60)}m ago`;
     if (diffInSeconds < 86400) return `${Math.floor(diffInSeconds / 3600)}h ago`;
     if (diffInSeconds < 604800) return `${Math.floor(diffInSeconds / 86400)}d ago`;
-    return date.toLocaleDateString();
+    return localDate.toLocaleString();
   };
 
   const renderFollowRequest = (notif: Notification) => {

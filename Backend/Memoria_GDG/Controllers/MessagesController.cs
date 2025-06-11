@@ -3,11 +3,12 @@ using Microsoft.EntityFrameworkCore;
 using Memoria_GDG;
 using System.Threading.Tasks;
 using System.Collections.Generic;
+using System.Linq;
 
 namespace Memoria_GDG.Controllers
 {
     [ApiController]
-    [Route("messages")]
+    [Route("api/[controller]")]
     public class MessagesController : ControllerBase
     {
         private readonly AppDbContext _context;
@@ -70,6 +71,18 @@ namespace Memoria_GDG.Controllers
             _context.Messages.Remove(message);
             await _context.SaveChangesAsync();
             return NoContent();
+        }
+
+        // GET /messages/between/{userId1}/{userId2}
+        [HttpGet("between/{userId1}/{userId2}")]
+        public async Task<ActionResult<IEnumerable<Message>>> GetMessagesBetween(int userId1, int userId2)
+        {
+            var messages = await _context.Messages
+                .Where(m => (m.SenderId == userId1 && m.ReceiverId == userId2) ||
+                            (m.SenderId == userId2 && m.ReceiverId == userId1))
+                .OrderBy(m => m.SentAt)
+                .ToListAsync();
+            return messages;
         }
     }
 } 
