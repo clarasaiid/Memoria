@@ -307,7 +307,8 @@ export default function EditProfileScreen() {
     }
 
     try {
-      const [firstName, ...lastNameParts] = profileData.fullName.split(' ');
+      // Fix: Ensure fullName is a string before splitting
+      const [firstName, ...lastNameParts] = (profileData.fullName || '').split(' ');
       const lastName = lastNameParts.join(' ');
 
       const updateData: any = {

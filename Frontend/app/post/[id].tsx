@@ -1,7 +1,7 @@
 import { useLocalSearchParams, router } from 'expo-router';
 import { View, Text, StyleSheet, Image, TouchableOpacity, ScrollView, TextInput, Platform, useWindowDimensions, ActivityIndicator } from 'react-native';
 import { useEffect, useState } from 'react';
-import { ArrowLeft, MoreHorizontal } from 'lucide-react-native';
+import { ArrowLeft } from 'lucide-react-native';
 import { apiService } from '../services/api';
 
 export default function PostDetails() {
@@ -65,7 +65,6 @@ export default function PostDetails() {
               </TouchableOpacity>
               <Image source={{ uri: post.user?.profilePictureUrl || `https://ui-avatars.com/api/?name=${post.user?.userName}` }} style={styles.avatar} />
               <Text style={styles.username}>{post.user?.userName}</Text>
-              <TouchableOpacity style={styles.menuBtn}><MoreHorizontal size={22} color="#222" /></TouchableOpacity>
             </View>
             {/* Likes/Caption */}
             <View style={styles.likesRow}>
@@ -123,7 +122,6 @@ const styles = StyleSheet.create({
   backBtn: { marginRight: 10 },
   avatar: { width: 40, height: 40, borderRadius: 20, marginRight: 10 },
   username: { fontSize: 16, color: '#222', fontWeight: 'bold', marginRight: 8 },
-  menuBtn: { marginLeft: 'auto', padding: 6 },
   likesRow: { marginBottom: 8 },
   likesText: { fontSize: 15, color: '#222', fontWeight: 'bold' },
   captionRow: { flexDirection: 'row', marginBottom: 10, flexWrap: 'wrap' },

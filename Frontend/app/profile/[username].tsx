@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { View, Text, StyleSheet, Image, TouchableOpacity, ScrollView, FlatList, Modal, TextInput, useWindowDimensions, ImageBackground, ActivityIndicator, Platform } from 'react-native';
-import { Heart, MessageCircle, Send, Bookmark as BookmarkSimple, MoreVertical, ArrowLeft, UserPlus, UserCheck, UserMinus } from 'lucide-react-native';
+import { Heart, MessageCircle, Send, Bookmark as BookmarkSimple, MoreVertical, ArrowLeft, UserPlus, UserCheck, UserMinus, Lock, LockOpen } from 'lucide-react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { apiService } from '../services/api';
 import { useTheme } from '../../components/ThemeProvider';
@@ -34,9 +34,11 @@ export default function PublicProfileScreen() {
   const [pendingFriend, setPendingFriend] = useState(false);
   const [isBlocked, setIsBlocked] = useState(false);
   const [hasBlocked, setHasBlocked] = useState(false);
+  const [followRequestPending, setFollowRequestPending] = useState(false);
   const insets = useSafeAreaInsets();
   const [currentUser, setCurrentUser] = useState<any>(null);
   const [moreModal, setMoreModal] = useState(false);
+  const [isPrivate, setIsPrivate] = useState(false);
 
   // Fetch profile and relationship
   const fetchProfile = async () => {
@@ -45,6 +47,7 @@ export default function PublicProfileScreen() {
     try {
       const res = await apiService.get(`/users/username/${username}`) as any;
       setProfile(res);
+      setIsPrivate(res.isPrivate);
       const followersRes = await apiService.get(`/users/${res.id}/followers`) as any[];
       setFollowers(followersRes);
       const followingRes = await apiService.get(`/users/${res.id}/following`) as any[];
@@ -79,8 +82,10 @@ export default function PublicProfileScreen() {
   }, []);
 
   useEffect(() => {
-    if (username && currentUser) fetchProfile();
-    // eslint-disable-next-line
+    if (username && currentUser) {
+      console.log('Fetching profile for username:', username);
+      fetchProfile();
+    }
   }, [username, currentUser]);
 
   // Unified button handlers
@@ -91,9 +96,14 @@ export default function PublicProfileScreen() {
       if (isFollowing) {
         await apiService.delete(`/users/${profile.id}/follow`);
         setIsFollowing(false);
+        setFollowRequestPending(false);
       } else {
-        await apiService.post(`/users/${profile.id}/follow`, {});
-        setIsFollowing(true);
+        const res = await apiService.post(`/users/${profile.id}/follow`, {});
+        if (res.status === 'pending') {
+          setFollowRequestPending(true);
+        } else {
+          setIsFollowing(true);
+        }
       }
       await fetchProfile();
     } catch (error) {
@@ -143,6 +153,21 @@ export default function PublicProfileScreen() {
       await fetchProfile();
     } catch (error) {
       console.error('Error blocking/unblocking user:', error);
+    } finally {
+      setIsLoadingAction(false);
+    }
+  };
+
+  const handleTogglePrivate = async () => {
+    if (!profile || isLoadingAction) return;
+    setIsLoadingAction(true);
+    try {
+      const res = await apiService.put('/users/me/private');
+      setIsPrivate(res.isPrivate);
+      console.log('Private account toggled:', res.isPrivate);
+      await fetchProfile();
+    } catch (error) {
+      console.error('Error toggling private account:', error);
     } finally {
       setIsLoadingAction(false);
     }
@@ -219,6 +244,12 @@ export default function PublicProfileScreen() {
               <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', marginBottom: 6 }}>
                 <Text style={{ color: colors.text, fontWeight: 'bold', fontSize: 24, marginRight: 8 }}>{profile.name || profile.firstName || ''}</Text>
                 <Text style={{ color: colors.textSecondary, fontSize: 16, marginRight: 8, opacity: 0.8 }}>@{profile.username}</Text>
+                {isPrivate && (
+                  <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: isDark ? 'rgba(74,144,226,0.15)' : 'rgba(70,130,180,0.08)', borderRadius: 8, paddingHorizontal: 8, paddingVertical: 2, marginRight: 8 }}>
+                    <Lock size={14} color={colors.primary} style={{ marginRight: 4 }} />
+                    <Text style={{ color: colors.primary, fontSize: 14 }}>Private</Text>
+                  </View>
+                )}
                 <TouchableOpacity onPress={() => setListModal({ visible: true, type: 'Friends', data: [] })}>
                   <Text style={{ color: colors.primary, fontSize: 15, backgroundColor: isDark ? 'rgba(74,144,226,0.15)' : 'rgba(70,130,180,0.08)', borderRadius: 8, paddingHorizontal: 8, paddingVertical: 2, marginRight: 8 }}>{friends.length} friends</Text>
                 </TouchableOpacity>
@@ -230,14 +261,14 @@ export default function PublicProfileScreen() {
                   <TouchableOpacity
                     style={[
                       styles.actionButton,
-                      { backgroundColor: isFollowing ? colors.primaryLight : colors.primary }
+                      { backgroundColor: isFollowing ? colors.primaryLight : followRequestPending ? colors.warning : colors.primary }
                     ]}
                     onPress={handleFollow}
                     disabled={isLoadingAction}
                   >
-                    {isFollowing ? <UserCheck color={colors.buttonText} size={20} /> : <UserPlus color={colors.buttonText} size={20} />}
+                    {isFollowing ? <UserCheck color={colors.buttonText} size={20} /> : followRequestPending ? <UserMinus color={colors.buttonText} size={20} /> : <UserPlus color={colors.buttonText} size={20} />}
                     <Text style={{ color: isFollowing ? colors.text : colors.buttonText, fontWeight: 'bold', fontSize: 15, marginLeft: 6 }}>
-                      {isFollowing ? 'Unfollow' : 'Follow'}
+                      {isFollowing ? 'Unfollow' : followRequestPending ? 'Requested' : 'Follow'}
                     </Text>
                   </TouchableOpacity>
                   {/* Add Friend/Remove Friend/Pending/Friends */}
@@ -250,15 +281,27 @@ export default function PublicProfileScreen() {
                     disabled={isLoadingAction || pendingFriend}
                   >
                     {isFriend ? <UserCheck color={colors.buttonText} size={20} /> : pendingFriend ? <UserMinus color={colors.buttonText} size={20} /> : <UserPlus color={colors.buttonText} size={20} />}
-                    <Text style={{ color: isFriend || pendingFriend ? colors.buttonText : colors.buttonText, fontWeight: 'bold', fontSize: 15, marginLeft: 6 }}>
-                      {isFriend ? 'Remove Friend' : pendingFriend ? 'Pending' : 'Add Friend'}
+                    <Text style={{ color: colors.buttonText, fontWeight: 'bold', fontSize: 15, marginLeft: 6 }}>
+                      {isFriend ? 'Friends' : pendingFriend ? 'Pending' : 'Add Friend'}
                     </Text>
                   </TouchableOpacity>
-                  {/* Message button only if friends */}
-                  {isFriend && (
-                    <MessageButton targetUserId={profile.id} targetUsername={profile.username} />
-                  )}
                 </View>
+              )}
+              {/* Private Account Toggle for own profile */}
+              {isOwnProfile && (
+                <TouchableOpacity
+                  style={[
+                    styles.actionButton,
+                    { backgroundColor: isPrivate ? colors.primaryLight : colors.primary, marginTop: 16 }
+                  ]}
+                  onPress={handleTogglePrivate}
+                  disabled={isLoadingAction}
+                >
+                  {isPrivate ? <Lock color={colors.text} size={20} /> : <LockOpen color={colors.buttonText} size={20} />}
+                  <Text style={{ color: isPrivate ? colors.text : colors.buttonText, fontWeight: 'bold', fontSize: 15, marginLeft: 6 }}>
+                    {isPrivate ? 'Private Account' : 'Public Account'}
+                  </Text>
+                </TouchableOpacity>
               )}
               {/* Blocked message */}
               {!isOwnProfile && (isBlocked || hasBlocked) && (

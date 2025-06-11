@@ -46,7 +46,29 @@ namespace Memoria_GDG.Controllers
             var user = await _context.Users.FirstOrDefaultAsync(u => u.UserName == username);
             if (user == null) return NotFound();
 
-            // Return only public info
+            var currentUserId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            var isCurrentUser = currentUserId != null && int.Parse(currentUserId) == user.Id;
+            var isFollowing = false;
+
+            if (!isCurrentUser && currentUserId != null)
+            {
+                isFollowing = await _context.Follows.AnyAsync(f => f.FollowerId == int.Parse(currentUserId) && f.FollowingId == user.Id);
+            }
+
+            // If the account is private and the viewer is not the owner or a follower, return limited info
+            if (user.IsPrivate && !isCurrentUser && !isFollowing)
+            {
+                return Ok(new {
+                    id = user.Id,
+                    username = user.UserName,
+                    firstName = user.FirstName,
+                    lastName = user.LastName,
+                    profilePictureUrl = user.ProfilePictureUrl,
+                    isPrivate = true
+                });
+            }
+
+            // Return full info for owner, followers, or public accounts
             return Ok(new {
                 id = user.Id,
                 username = user.UserName,
@@ -55,6 +77,7 @@ namespace Memoria_GDG.Controllers
                 bio = user.Bio,
                 profilePictureUrl = user.ProfilePictureUrl,
                 coverPhotoUrl = user.CoverPhotoUrl,
+                isPrivate = user.IsPrivate,
                 // Add more fields as needed
             });
         }
@@ -206,13 +229,97 @@ namespace Memoria_GDG.Controllers
             var currentUserId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier));
             if (currentUserId == id) return BadRequest("Cannot follow yourself.");
 
-            var alreadyFollowing = await _context.Follows.AnyAsync(f => f.FollowerId == currentUserId && f.FollowingId == id);
-            if (alreadyFollowing) return BadRequest("Already following.");
+            var targetUser = await _context.Users.FindAsync(id);
+            if (targetUser == null) return NotFound("User not found.");
 
-            var follow = new Follow { FollowerId = currentUserId, FollowingId = id };
+            var existingFollow = await _context.Follows
+                .FirstOrDefaultAsync(f => f.FollowerId == currentUserId && f.FollowingId == id);
+
+            if (existingFollow != null)
+            {
+                if (existingFollow.Status == FollowStatus.Pending)
+                    return BadRequest("Follow request already pending.");
+                if (existingFollow.Status == FollowStatus.Accepted)
+                    return BadRequest("Already following.");
+                if (existingFollow.Status == FollowStatus.Rejected)
+                {
+                    existingFollow.Status = FollowStatus.Pending;
+                    await _context.SaveChangesAsync();
+                    return Ok(new { status = "pending" });
+                }
+            }
+
+            var follow = new Follow 
+            { 
+                FollowerId = currentUserId, 
+                FollowingId = id,
+                Status = targetUser.IsPrivate ? FollowStatus.Pending : FollowStatus.Accepted
+            };
             _context.Follows.Add(follow);
             await _context.SaveChangesAsync();
-            return Ok();
+
+            // Create notification for follow request if account is private
+            if (targetUser.IsPrivate)
+            {
+                var notification = new Notification
+                {
+                    UserId = id,
+                    Type = "follow_request",
+                    Content = $"@{User.Identity.Name} requested to follow you",
+                    CreatedAt = DateTime.UtcNow,
+                    Read = false
+                };
+                _context.Notifications.Add(notification);
+                await _context.SaveChangesAsync();
+            }
+
+            return Ok(new { status = targetUser.IsPrivate ? "pending" : "accepted" });
+        }
+
+        // PUT /users/{id}/follow/accept
+        [HttpPut("{id}/follow/accept")]
+        [Authorize]
+        public async Task<IActionResult> AcceptFollowRequest(int id)
+        {
+            var currentUserId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier));
+            var follow = await _context.Follows
+                .FirstOrDefaultAsync(f => f.FollowerId == id && f.FollowingId == currentUserId && f.Status == FollowStatus.Pending);
+
+            if (follow == null) return NotFound("Follow request not found.");
+
+            follow.Status = FollowStatus.Accepted;
+            await _context.SaveChangesAsync();
+
+            // Create notification for accepted follow request
+            var notification = new Notification
+            {
+                UserId = id,
+                Type = "follow_accepted",
+                Content = $"@{User.Identity.Name} accepted your follow request",
+                CreatedAt = DateTime.UtcNow,
+                Read = false
+            };
+            _context.Notifications.Add(notification);
+            await _context.SaveChangesAsync();
+
+            return Ok(new { status = "accepted" });
+        }
+
+        // PUT /users/{id}/follow/reject
+        [HttpPut("{id}/follow/reject")]
+        [Authorize]
+        public async Task<IActionResult> RejectFollowRequest(int id)
+        {
+            var currentUserId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier));
+            var follow = await _context.Follows
+                .FirstOrDefaultAsync(f => f.FollowerId == id && f.FollowingId == currentUserId && f.Status == FollowStatus.Pending);
+
+            if (follow == null) return NotFound("Follow request not found.");
+
+            follow.Status = FollowStatus.Rejected;
+            await _context.SaveChangesAsync();
+
+            return Ok(new { status = "rejected" });
         }
 
         // DELETE /users/{id}/follow
@@ -221,8 +328,11 @@ namespace Memoria_GDG.Controllers
         public async Task<IActionResult> UnfollowUser(int id)
         {
             var currentUserId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier));
-            var follow = await _context.Follows.FirstOrDefaultAsync(f => f.FollowerId == currentUserId && f.FollowingId == id);
+            var follow = await _context.Follows
+                .FirstOrDefaultAsync(f => f.FollowerId == currentUserId && f.FollowingId == id);
+            
             if (follow == null) return NotFound();
+            
             _context.Follows.Remove(follow);
             await _context.SaveChangesAsync();
             return NoContent();
@@ -232,8 +342,11 @@ namespace Memoria_GDG.Controllers
         [HttpGet("{id}/followers")]
         public async Task<IActionResult> GetFollowers(int id)
         {
+            var currentUserId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            var isCurrentUser = currentUserId != null && int.Parse(currentUserId) == id;
+
             var followers = await _context.Follows
-                .Where(f => f.FollowingId == id)
+                .Where(f => f.FollowingId == id && (f.Status == FollowStatus.Accepted || isCurrentUser))
                 .Select(f => f.Follower)
                 .Select(u => new {
                     id = u.Id,
@@ -245,6 +358,7 @@ namespace Memoria_GDG.Controllers
                     coverPhotoUrl = u.CoverPhotoUrl
                 })
                 .ToListAsync();
+
             return Ok(followers);
         }
 
@@ -252,8 +366,11 @@ namespace Memoria_GDG.Controllers
         [HttpGet("{id}/following")]
         public async Task<IActionResult> GetFollowing(int id)
         {
+            var currentUserId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            var isCurrentUser = currentUserId != null && int.Parse(currentUserId) == id;
+
             var following = await _context.Follows
-                .Where(f => f.FollowerId == id)
+                .Where(f => f.FollowerId == id && (f.Status == FollowStatus.Accepted || isCurrentUser))
                 .Select(f => f.Following)
                 .Select(u => new {
                     id = u.Id,
@@ -265,7 +382,33 @@ namespace Memoria_GDG.Controllers
                     coverPhotoUrl = u.CoverPhotoUrl
                 })
                 .ToListAsync();
+
             return Ok(following);
+        }
+
+        // GET /users/{id}/follow-requests
+        [HttpGet("{id}/follow-requests")]
+        [Authorize]
+        public async Task<IActionResult> GetFollowRequests(int id)
+        {
+            var currentUserId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier));
+            if (currentUserId != id) return Forbid();
+
+            var requests = await _context.Follows
+                .Where(f => f.FollowingId == id && f.Status == FollowStatus.Pending)
+                .Select(f => f.Follower)
+                .Select(u => new {
+                    id = u.Id,
+                    username = u.UserName,
+                    firstName = u.FirstName,
+                    lastName = u.LastName,
+                    bio = u.Bio,
+                    profilePictureUrl = u.ProfilePictureUrl,
+                    coverPhotoUrl = u.CoverPhotoUrl
+                })
+                .ToListAsync();
+
+            return Ok(requests);
         }
 
         // GET /users/{id}/friends
@@ -362,6 +505,21 @@ namespace Memoria_GDG.Controllers
             _context.Blocks.Remove(block);
             await _context.SaveChangesAsync();
             return NoContent();
+        }
+
+        // PUT /users/me/private
+        [HttpPut("me/private")]
+        [Authorize]
+        public async Task<IActionResult> TogglePrivateAccount()
+        {
+            var userId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier));
+            var user = await _context.Users.FindAsync(userId);
+            if (user == null) return NotFound();
+
+            user.IsPrivate = !user.IsPrivate;
+            await _context.SaveChangesAsync();
+
+            return Ok(new { isPrivate = user.IsPrivate });
         }
     }
 }

@@ -317,6 +317,14 @@ namespace Memoria_GDG.Controllers
             return Ok(new { available = user == null });
         }
 
+        // GET /auth/check-email?email=...
+        [HttpGet("check-email")]
+        public async Task<IActionResult> CheckEmail([FromQuery] string email)
+        {
+            var user = await _userManager.FindByEmailAsync(email);
+            return Ok(new { available = user == null });
+        }
+
         // GET /auth/me
         [HttpGet("me")]
         [Authorize]
