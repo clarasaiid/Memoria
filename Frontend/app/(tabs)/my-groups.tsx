@@ -25,6 +25,8 @@ const mockGroups = [
   },
 ];
 
+export const options = { headerShown: false };
+
 export default function GroupsScreen() {
   const { colors } = useTheme();
 
