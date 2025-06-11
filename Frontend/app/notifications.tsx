@@ -5,6 +5,7 @@ import { useRouter } from 'expo-router';
 import { useState, useEffect } from 'react';
 import { notificationsService, Notification, FriendRequest } from './services/notifications';
 import { useTheme } from '../components/ThemeProvider';
+import * as signalR from '@microsoft/signalr';
 
 const getNotificationIcon = (type: Notification['type'], colors: any) => {
   switch (type) {
@@ -12,6 +13,8 @@ const getNotificationIcon = (type: Notification['type'], colors: any) => {
       return <UserPlus color={colors.accent} size={24} />;
     case 'friend_request_accepted':
       return <Check color={colors.success} size={24} />;
+    case 'follow':
+      return <UserPlus color={colors.accent} size={24} />;
     case 'like':
       return <Heart color={colors.accent} size={24} />;
     case 'time_capsule':
@@ -27,9 +30,11 @@ const getNotificationIcon = (type: Notification['type'], colors: any) => {
 
 export default function NotificationsScreen() {
   const router = useRouter();
-  const [activeTab, setActiveTab] = useState<'all' | 'requests'>('all');
+  const [activeTab, setActiveTab] = useState<'all' | 'requests' | 'follows'>('all');
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [friendRequests, setFriendRequests] = useState<FriendRequest[]>([]);
+  const [followRequests, setFollowRequests] = useState<Notification[]>([]);
+  const [isPrivateAccount, setIsPrivateAccount] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const { isDark, colors } = useTheme();
@@ -38,12 +43,20 @@ export default function NotificationsScreen() {
     try {
       setLoading(true);
       setError(null);
-      const [notifs, requests] = await Promise.all([
+      const [notifs, requests, me] = await Promise.all([
         notificationsService.getNotifications(),
         notificationsService.getFriendRequests(),
+        notificationsService.getMe(),
       ]);
+
       setNotifications(notifs);
       setFriendRequests(requests);
+      setIsPrivateAccount(me.profile?.isPrivate ?? false);
+
+      if (me.profile?.isPrivate) {
+        const followReqs = await notificationsService.getFollowRequests();
+        setFollowRequests(followReqs);
+      }
     } catch (err) {
       setError('Failed to load notifications. Please try again.');
       console.error('Error loading notifications:', err);
@@ -56,11 +69,37 @@ export default function NotificationsScreen() {
     loadData();
   }, []);
 
+  // SignalR connection for real-time notifications
+  useEffect(() => {
+    const connection = new signalR.HubConnectionBuilder()
+      .withUrl('http://localhost:7000/chatHub', { withCredentials: true })
+      .withAutomaticReconnect()
+      .build();
+
+    connection.start()
+      .then(() => {
+        connection.on('ReceiveNotification', (notification) => {
+          setNotifications(prev => [notification, ...prev]);
+          if (notification.type === 'friend_request') {
+            setFriendRequests(prev => [notification, ...prev]);
+          }
+          if (notification.type === 'follow' && isPrivateAccount) {
+            setFollowRequests(prev => [notification, ...prev]);
+          }
+        });
+      })
+      .catch(console.error);
+
+    return () => {
+      connection.stop();
+    };
+  }, [isPrivateAccount]);
+
   const handleNotificationPress = async (notification: Notification) => {
     try {
       if (!notification.read) {
         await notificationsService.markNotificationAsRead(notification.id);
-        setNotifications(prev => 
+        setNotifications(prev =>
           prev.map(n => n.id === notification.id ? { ...n, read: true } : n)
         );
       }
@@ -68,6 +107,7 @@ export default function NotificationsScreen() {
       switch (notification.type) {
         case 'friend_request':
         case 'friend_request_accepted':
+        case 'follow':
           if (notification.userId) {
             router.push({ pathname: '/profile', params: { username: String(notification.userId) } });
           }
@@ -100,7 +140,7 @@ export default function NotificationsScreen() {
       await notificationsService.handleFriendRequest(requestId, accept);
       setFriendRequests(prev => prev.filter(req => req.id !== requestId));
       if (accept) {
-        setNotifications(prev => 
+        setNotifications(prev =>
           prev.filter(n => !(n.type === 'friend_request' && n.userId === requestId))
         );
       }
@@ -109,42 +149,221 @@ export default function NotificationsScreen() {
     }
   };
 
-  if (loading) {
-    return (
-      <SafeAreaView style={{ flex: 1, backgroundColor: colors.background }}>
-        <View style={{ flexDirection: 'row', alignItems: 'center', padding: 20, backgroundColor: colors.background, borderBottomWidth: 1, borderBottomColor: colors.border }}>
-          <TouchableOpacity onPress={() => router.back()} style={{ marginRight: 12 }}>
-            <ArrowLeft color={colors.primary} size={28} />
-          </TouchableOpacity>
-          <Bell color={colors.primary} size={32} />
-          <Text style={{ fontFamily: 'Kapsalon', fontSize: 24, color: colors.primary, marginLeft: 12 }}>Notifications</Text>
-        </View>
-        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-          <ActivityIndicator size="large" color={colors.primary} />
-        </View>
-      </SafeAreaView>
-    );
-  }
+  const handleFollowRequest = async (followId: string, accept: boolean) => {
+    try {
+      await notificationsService.handleFollowRequest(followId, accept);
+      setFollowRequests(prev => prev.filter(req => req.id !== followId));
+      if (accept) {
+        setNotifications(prev => prev.map(n => n.id === followId ? { ...n, read: true } : n));
+      }
+    } catch (err) {
+      console.error('Error handling follow request:', err);
+    }
+  };
 
-  if (error) {
+  // Helper to get 'read' property safely
+  const getRead = (notif: Notification | FriendRequest) => {
+    return (notif as Notification).read ?? false;
+  };
+
+  // Helper to map Friendship to notification card props
+  const mapFriendRequestToNotification = (req: any) => ({
+    id: req.id,
+    type: 'friend_request',
+    text: `${req.User?.FirstName ?? ''} ${req.User?.LastName ?? ''} (@${req.User?.UserName ?? ''}) sent you a friend request`,
+    read: false,
+    username: req.User?.UserName ?? '',
+    fullName: `${req.User?.FirstName ?? ''} ${req.User?.LastName ?? ''}`.trim(),
+    userId: req.User?.Id ?? req.id,
+    avatarUrl: req.User?.ProfilePictureUrl ?? '',
+    createdAt: req.CreatedAt ?? new Date().toISOString(),
+    PostId: req.id,
+  });
+
+  const renderNotificationCard = (
+    notif: Notification | FriendRequest,
+    showActions: boolean = false
+  ) => {
+    // Determine if this is a friend request and get the correct id for actions
+    const isFriendRequest = ('type' in notif ? notif.type : undefined) === 'friend_request';
+    // Use PostId if available (from Notification), else userId, else id
+    const friendRequestId = isFriendRequest
+      ? (('PostId' in notif && notif.PostId) ? String((notif as any).PostId) : String(notif.id))
+      : String(notif.id);
+
+    // Get the sender's information
+    const avatarUrl = 'senderAvatarUrl' in notif ? notif.senderAvatarUrl : ('avatarUrl' in notif ? notif.avatarUrl : '');
+    const username = 'senderUsername' in notif ? notif.senderUsername : ('username' in notif ? notif.username : '');
+    const fullName = 'senderFullName' in notif ? notif.senderFullName : ('fullName' in notif ? notif.fullName : '');
+    const createdAt = 'createdAt' in notif ? new Date(notif.createdAt) : new Date();
+
+    // Format the time
+    const timeAgo = formatTimeAgo(createdAt);
+
+    // Compose the text for friend requests to always include username
+    let displayText = '';
+    if (isFriendRequest) {
+      displayText = `${fullName} (@${username}) sent you a friend request`;
+    } else {
+      displayText = 'text' in notif ? notif.text || '' : '';
+    }
+
     return (
-      <SafeAreaView style={{ flex: 1, backgroundColor: colors.background }}>
-        <View style={{ flexDirection: 'row', alignItems: 'center', padding: 20, backgroundColor: colors.background, borderBottomWidth: 1, borderBottomColor: colors.border }}>
-          <TouchableOpacity onPress={() => router.back()} style={{ marginRight: 12 }}>
-            <ArrowLeft color={colors.primary} size={28} />
-          </TouchableOpacity>
-          <Bell color={colors.primary} size={32} />
-          <Text style={{ fontFamily: 'Kapsalon', fontSize: 24, color: colors.primary, marginLeft: 12 }}>Notifications</Text>
-        </View>
-        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', padding: 20 }}>
-          <Text style={{ color: colors.error, fontSize: 16, textAlign: 'center', marginBottom: 16 }}>{error}</Text>
-          <TouchableOpacity style={{ backgroundColor: colors.primary, paddingHorizontal: 20, paddingVertical: 10, borderRadius: 8 }} onPress={loadData}>
-            <Text style={{ color: colors.buttonText, fontSize: 16, fontWeight: '600' }}>Retry</Text>
-          </TouchableOpacity>
-        </View>
-      </SafeAreaView>
+      <View
+        key={notif.id}
+        style={{
+          flexDirection: 'row',
+          alignItems: 'center',
+          backgroundColor: getRead(notif) ? colors.cardAlt : (isDark ? '#23262F' : '#E3F0FF'),
+          borderRadius: 12,
+          padding: 16,
+          marginBottom: 16,
+          borderWidth: 1,
+          borderColor: getRead(notif) ? colors.border : colors.primary,
+          justifyContent: 'space-between',
+        }}
+      >
+        <TouchableOpacity
+          style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}
+          onPress={() => handleNotificationPress(notif as Notification)}
+        >
+          {!getRead(notif) && (
+            <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: colors.primary, marginRight: 12 }} />
+          )}
+          {avatarUrl && (
+            <Image
+              source={{ uri: avatarUrl }}
+              style={{ width: 40, height: 40, borderRadius: 20, marginRight: 12 }}
+            />
+          )}
+          <View style={{ flex: 1 }}>
+            <Text style={{ fontSize: 15, color: colors.text, fontWeight: '500' }}>{displayText}</Text>
+            <Text style={{ fontSize: 12, color: colors.textSecondary, marginTop: 4 }}>{timeAgo}</Text>
+          </View>
+        </TouchableOpacity>
+        {showActions && isFriendRequest && (
+          <View style={{ flexDirection: 'row', gap: 8, marginLeft: 10 }}>
+            <TouchableOpacity
+              style={{
+                width: 36,
+                height: 36,
+                borderRadius: 18,
+                backgroundColor: colors.success,
+                justifyContent: 'center',
+                alignItems: 'center',
+              }}
+              onPress={() => handleFriendRequest(friendRequestId, true)}
+            >
+              <Check color="white" size={20} />
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={{
+                width: 36,
+                height: 36,
+                borderRadius: 18,
+                backgroundColor: colors.error,
+                justifyContent: 'center',
+                alignItems: 'center',
+              }}
+              onPress={() => handleFriendRequest(friendRequestId, false)}
+            >
+              <X color="white" size={20} />
+            </TouchableOpacity>
+          </View>
+        )}
+      </View>
     );
-  }
+  };
+
+  // Helper function to format time ago
+  const formatTimeAgo = (date: Date) => {
+    const now = new Date();
+    const diffInSeconds = Math.floor((now.getTime() - date.getTime()) / 1000);
+
+    if (diffInSeconds < 60) return 'just now';
+    if (diffInSeconds < 3600) return `${Math.floor(diffInSeconds / 60)}m ago`;
+    if (diffInSeconds < 86400) return `${Math.floor(diffInSeconds / 3600)}h ago`;
+    if (diffInSeconds < 604800) return `${Math.floor(diffInSeconds / 86400)}d ago`;
+    return date.toLocaleDateString();
+  };
+
+  const renderFollowRequest = (notif: Notification) => {
+    const timeAgo = formatTimeAgo(new Date(notif.createdAt));
+    const followRequestId = 'PostId' in notif && notif.PostId ? String((notif as any).PostId) : String(notif.id);
+    return (
+      <View
+        key={notif.id}
+        style={{
+          flexDirection: 'row',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          backgroundColor: notif.read ? colors.cardAlt : (isDark ? '#23262F' : '#E3F0FF'),
+          borderRadius: 12,
+          padding: 16,
+          marginBottom: 16,
+          borderWidth: 1,
+          borderColor: notif.read ? colors.border : colors.primary,
+        }}
+      >
+        <TouchableOpacity
+          style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}
+          onPress={() => handleNotificationPress(notif)}
+        >
+          {!notif.read && (
+            <View
+              style={{
+                width: 8,
+                height: 8,
+                borderRadius: 4,
+                backgroundColor: colors.primary,
+                marginRight: 12,
+              }}
+            />
+          )}
+          {notif.senderAvatarUrl && (
+            <Image
+              source={{ uri: notif.senderAvatarUrl }}
+              style={{ width: 40, height: 40, borderRadius: 20, marginRight: 12 }}
+            />
+          )}
+          <View style={{ flex: 1 }}>
+            <Text style={{ fontSize: 15, color: colors.text, fontWeight: '500' }}>
+              {notif.senderFullName} (@{notif.senderUsername}) wants to follow you
+            </Text>
+            <Text style={{ fontSize: 12, color: colors.textSecondary, marginTop: 4 }}>{timeAgo}</Text>
+          </View>
+        </TouchableOpacity>
+        <View style={{ flexDirection: 'row', gap: 8, marginLeft: 10 }}>
+          <TouchableOpacity
+            style={{
+              width: 36,
+              height: 36,
+              borderRadius: 18,
+              backgroundColor: colors.success,
+              justifyContent: 'center',
+              alignItems: 'center',
+            }}
+            onPress={() => handleFollowRequest(followRequestId, true)}
+          >
+            <Check color="white" size={20} />
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={{
+              width: 36,
+              height: 36,
+              borderRadius: 18,
+              backgroundColor: colors.error,
+              justifyContent: 'center',
+              alignItems: 'center',
+            }}
+            onPress={() => handleFollowRequest(followRequestId, false)}
+          >
+            <X color="white" size={20} />
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
+  };
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.background }}>
@@ -157,93 +376,73 @@ export default function NotificationsScreen() {
       </View>
 
       <View style={{ flexDirection: 'row', paddingHorizontal: 20, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: colors.border, backgroundColor: colors.background }}>
-        <TouchableOpacity 
+        <TouchableOpacity
           style={[{ marginRight: 24, paddingBottom: 6 }, activeTab === 'all' && { borderBottomWidth: 3, borderBottomColor: colors.primary }]}
           onPress={() => setActiveTab('all')}
         >
           <Text style={{ fontSize: 16, color: activeTab === 'all' ? colors.tabActive : colors.tabInactive, fontWeight: activeTab === 'all' ? '700' : '600' }}>All</Text>
         </TouchableOpacity>
-        <TouchableOpacity 
+        <TouchableOpacity
           style={[{ marginRight: 24, paddingBottom: 6 }, activeTab === 'requests' && { borderBottomWidth: 3, borderBottomColor: colors.primary }]}
           onPress={() => setActiveTab('requests')}
         >
-          <Text style={{ fontSize: 16, color: activeTab === 'requests' ? colors.tabActive : colors.tabInactive, fontWeight: activeTab === 'requests' ? '700' : '600' }}>Friend Requests</Text>
+          <Text style={{ fontSize: 16, color: activeTab === 'requests' ? colors.tabActive : colors.tabInactive, fontWeight: activeTab === 'requests' ? '700' : '600' }}>
+            Friend Requests{notifications.filter(n => n.type === 'friend_request').length > 0 ? ` (${notifications.filter(n => n.type === 'friend_request').length})` : ''}
+          </Text>
         </TouchableOpacity>
+        {isPrivateAccount && (
+          <TouchableOpacity
+            style={[{ marginRight: 24, paddingBottom: 6 }, activeTab === 'follows' && { borderBottomWidth: 3, borderBottomColor: colors.primary }]}
+            onPress={() => setActiveTab('follows')}
+          >
+            <Text style={{ fontSize: 16, color: activeTab === 'follows' ? colors.tabActive : colors.tabInactive, fontWeight: activeTab === 'follows' ? '700' : '600' }}>
+              Follow Requests{notifications.filter(n => n.type === 'follow_request').length > 0 ? ` (${notifications.filter(n => n.type === 'follow_request').length})` : ''}
+            </Text>
+          </TouchableOpacity>
+        )}
       </View>
 
       <ScrollView contentContainerStyle={{ padding: 20 }}>
-        {activeTab === 'all' ? (
+        {loading ? (
+          <ActivityIndicator size="large" color={colors.primary} />
+        ) : error ? (
+          <Text style={{ color: colors.error, textAlign: 'center', marginTop: 20 }}>{error}</Text>
+        ) : activeTab === 'all' ? (
           notifications.length > 0 ? (
-            notifications.map((notif) => (
-              <TouchableOpacity
-                key={notif.id}
-                style={{
-                  flexDirection: 'row',
-                  alignItems: 'center',
-                  backgroundColor: notif.read ? colors.cardAlt : (isDark ? '#23262F' : '#E3F0FF'),
-                  borderRadius: 12,
-                  padding: 16,
-                  marginBottom: 16,
-                  borderWidth: 1,
-                  borderColor: notif.read ? colors.border : colors.primary,
-                  shadowOpacity: 0.04,
-                  shadowRadius: 4,
-                  shadowOffset: { width: 0, height: 2 },
-                }}
-                onPress={() => handleNotificationPress(notif)}
-              >
-                {!notif.read && <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: colors.primary, marginRight: 12 }} />}
-                {getNotificationIcon(notif.type, colors)}
-                <Text style={{ fontSize: 15, color: colors.text, marginLeft: 16, fontWeight: '500' }}>{notif.text}</Text>
-              </TouchableOpacity>
-            ))
+            notifications.map((notif) =>
+              renderNotificationCard(
+                notif,
+                notif.type === 'friend_request' // show actions for friend requests
+              )
+            )
           ) : (
-            <Text style={{ textAlign: 'center', color: colors.textSecondary, fontSize: 16, marginTop: 20 }}>No notifications yet</Text>
+            <Text style={{ textAlign: 'center', color: colors.textSecondary, fontSize: 16 }}>No notifications yet</Text>
           )
-        ) : (
-          friendRequests.length > 0 ? (
-            friendRequests.map((request) => (
-              <View key={request.id} style={{
-                flexDirection: 'row',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                backgroundColor: colors.cardAlt,
-                borderRadius: 12,
-                padding: 16,
-                marginBottom: 16,
-                borderWidth: 1,
-                borderColor: colors.border,
-              }}>
-                <TouchableOpacity 
-                  style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}
-                  onPress={() => router.push({ pathname: '/profile', params: { username: String(request.username) } })}
-                >
-                  <View style={{ marginRight: 12 }}>
-                    <Image source={{ uri: request.avatarUrl }} style={{ width: 40, height: 40, borderRadius: 20 }} />
-                  </View>
-                  <Text style={{ fontSize: 16, fontWeight: '600', color: colors.text }}>{request.username}</Text>
-                </TouchableOpacity>
-                <View style={{ flexDirection: 'row', gap: 8 }}>
-                  <TouchableOpacity 
-                    style={{ width: 36, height: 36, borderRadius: 18, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.success }}
-                    onPress={() => handleFriendRequest(request.id, true)}
-                  >
-                    <Check color={colors.buttonText} size={20} />
-                  </TouchableOpacity>
-                  <TouchableOpacity 
-                    style={{ width: 36, height: 36, borderRadius: 18, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.error }}
-                    onPress={() => handleFriendRequest(request.id, false)}
-                  >
-                    <X color={colors.buttonText} size={20} />
-                  </TouchableOpacity>
-                </View>
-              </View>
-            ))
+        ) : activeTab === 'requests' ? (
+          notifications.filter(n => n.type === 'friend_request').length > 0 ? (
+            notifications
+              .filter(n => n.type === 'friend_request')
+              .map((notif) => renderNotificationCard(notif, true))
           ) : (
             <Text style={{ textAlign: 'center', color: colors.textSecondary, fontSize: 16, marginTop: 20 }}>No friend requests</Text>
           )
-        )}
+        ) : activeTab === 'follows' ? (
+          notifications.filter(n => n.type === 'follow_request').length > 0 ? (
+            notifications
+              .filter(n => n.type === 'follow_request')
+              .map((notif) => renderFollowRequest(notif))
+          ) : (
+            <Text style={{ textAlign: 'center', color: colors.textSecondary, fontSize: 16, marginTop: 20 }}>No follow requests</Text>
+          )
+        ) : null}
       </ScrollView>
     </SafeAreaView>
   );
-} 
+}
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: '#F5F5F5',
+  },
+});
