@@ -168,6 +168,8 @@ const SIDEBAR_TEXT = '#fff';
 const SIDEBAR_ACTIVE = '#3b82f6';
 const SIDEBAR_AVATAR_PLACEHOLDER = 'https://ui-avatars.com/api/?name=User&background=F3E8FF&color=A78BFA';
 
+export const options = { headerShown: false };
+
 export default function HomePage() {
   const router = useRouter();
   const [publicCapsules, setPublicCapsules] = useState<Capsule[]>([]);
@@ -187,9 +189,9 @@ export default function HomePage() {
   const [searchResults, setSearchResults] = useState<SearchResult | null>(null);
   const [isSearching, setIsSearching] = useState(false);
   const searchBarRef = useRef<View>(null);
-  const searchBarContainerRef = useRef(null);
+  const searchBarContainerRef = useRef<View>(null);
   const dropdownRef = useRef(null);
-  const [dropdownPos, setDropdownPos] = useState({ top: 0, left: 0, width: 300 });
+  const [dropdownPos, setDropdownPos] = useState({ top: 0, left: 0, width: 0 });
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
   const [searchBarFocused, setSearchBarFocused] = useState(false);
   const [recommendedFeed, setRecommendedFeed] = useState<LocalFeedPost[]>([]);
@@ -199,6 +201,14 @@ export default function HomePage() {
   const [searchBarMeasurements, setSearchBarMeasurements] = useState<SearchBarMeasurements>({ x: 0, y: 0, width: 0, height: 0, pageX: 0, pageY: 0 });
   const [recentSearches, setRecentSearches] = useState<string[]>([]);
   const [sidebarUser, setSidebarUser] = useState<{ userName: string; profilePictureUrl?: string } | null>(null);
+
+  const handleUserSelect = (username: string) => {
+    console.log('Navigating to profile:', username);
+    Alert.alert('Navigation', `Attempting to navigate to /profile/${username}`);
+    router.push(`/profile/${username}`);
+    setShowSearchBar(false);
+    setSearch('');
+  };
 
   useEffect(() => {
     setPublicCapsules(mockPublicCapsules);
@@ -346,7 +356,7 @@ export default function HomePage() {
 
   const styles = StyleSheet.create<Styles>({
     pageWrapper: { flex: 1, backgroundColor: colors.background },
-    topBar: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 16, backgroundColor: colors.cardAlt, borderBottomWidth: 1, borderBottomColor: colors.border },
+    topBar: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 16, backgroundColor: colors.cardAlt },
     logo: { fontFamily: 'Kapsalon', fontSize: 48, color: colors.text },
     searchBar: { flex: 1, flexDirection: 'row', alignItems: 'center', backgroundColor: colors.card, borderRadius: 8, paddingHorizontal: 12, marginHorizontal: 16 },
     searchInput: { flex: 1, height: 40, color: colors.text },
@@ -403,94 +413,8 @@ export default function HomePage() {
     menuContent: { padding: 16, borderRadius: 8, width: 200 },
   });
 
-  const renderSearchResults = () => {
-    if (!showSearchBar) return null;
-
-    return (
-      <View style={styles.searchResults}>
-          <View style={styles.searchSection}>
-          <Text style={styles.searchSectionTitle}>Recent Searches</Text>
-          {recentSearches.map((search, index) => (
-              <TouchableOpacity
-              key={index}
-              style={styles.searchItem}
-              onPress={() => handleSearchSelect(search)}
-            >
-              <Text style={styles.username}>{search}</Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-      </View>
-    );
-  };
-
-  const extractHashtags = (content: string): string[] => {
-    const hashtagRegex = /#[\w-]+/g;
-    return content.match(hashtagRegex) || [];
-  };
-
-  const determineCategory = (content: string): string => {
-    const categories = {
-      travel: ['travel', 'trip', 'vacation', 'beach', 'mountain'],
-      photography: ['photo', 'picture', 'camera', 'shot'],
-      memories: ['memory', 'remember', 'throwback', 'nostalgia'],
-    };
-
-    const contentLower = content.toLowerCase();
-    for (const [category, keywords] of Object.entries(categories)) {
-      if (keywords.some(keyword => contentLower.includes(keyword))) {
-        return category;
-      }
-    }
-    return 'general';
-  };
-
-  const calculateEngagement = (post: LocalFeedPost): number => {
-    const likes = post.likeCount || 0;
-    const comments = post.commentCount || 0;
-    return (likes + comments * 2) / 100;
-  };
-
-  const calculateRecency = (timeAgo: string): number => {
-    const hours = parseInt(timeAgo);
-    if (isNaN(hours)) return 0.5;
-    return Math.max(0, 1 - hours / 24);
-  };
-
   const handlePostInteraction = (postId: number, type: 'view' | 'like' | 'comment') => {
     recommendationService.recordPostInteraction(postId, type);
-  };
-
-  const handleSearchBarLayout = () => {
-    if (searchBarRef.current) {
-      searchBarRef.current.measure((x: number, y: number, width: number, height: number, pageX: number, pageY: number) => {
-        setSearchBarMeasurements({ x, y, width, height, pageX, pageY });
-      });
-    }
-  };
-
-  const handleClickOutside = (event: GestureResponderEvent) => {
-    if (searchBarRef.current) {
-      const { pageX, pageY } = event.nativeEvent;
-      const { x, y, width, height } = searchBarMeasurements;
-      
-      if (
-        pageX < x ||
-        pageX > x + width ||
-        pageY < y ||
-        pageY > y + height
-      ) {
-        setShowSearchBar(false);
-      }
-    }
-  };
-
-  const handleSearchSelect = (searchTerm: string) => {
-    setSearch(searchTerm);
-    setShowSearchBar(false);
-    if (!recentSearches.includes(searchTerm)) {
-      setRecentSearches(prev => [searchTerm, ...prev].slice(0, 5));
-    }
   };
 
   const renderFeed = () => {
@@ -636,66 +560,185 @@ export default function HomePage() {
     }
   };
 
+  // Restore dropdownPos measurement and handler
+  const handleSearchBarFocus = () => {
+    setShowSearchBar(true);
+    if (searchBarContainerRef.current) {
+      searchBarContainerRef.current.measure((x, y, width, height, pageX, pageY) => {
+        setDropdownPos({ top: pageY + height, left: pageX, width });
+      });
+    }
+  };
+
   return (
-    <View style={{ flex: 1, flexDirection: 'row' }}>
-      {/* Center Feed (centered) */}
-      <View style={{
-        flex: 1,
-        maxWidth: 700,
-        marginLeft: 'auto',
-        marginRight: 'auto',
-        borderRightWidth: 1,
-        borderRightColor: colors.border,
-        borderLeftWidth: 1,
-        borderLeftColor: colors.border,
-        backgroundColor: colors.background,
-      }}>
-        <ScrollView showsVerticalScrollIndicator={false} style={{ flex: 1 }}>
-          {renderFeed()}
-        </ScrollView>
+    <View style={{ flex: 1, backgroundColor: colors.background }}>
+      {/* Custom Top Bar */}
+      <View style={styles.topBar}>
+        <Text style={styles.logo}>MEMORIA</Text>
+        <View ref={searchBarContainerRef} style={styles.searchBar}>
+          <SearchIcon size={20} color={colors.textSecondary} style={styles.searchIcon} />
+          <TextInput
+            style={styles.searchInput}
+            placeholder="Search"
+            placeholderTextColor={colors.textSecondary}
+            value={search}
+            onFocus={handleSearchBarFocus}
+            onChangeText={setSearch}
+          />
+        </View>
+        <TouchableOpacity 
+          style={styles.notificationButton}
+          onPress={() => router.push('/notifications')}
+        >
+          <Bell size={22} color={colors.primary} />
+        </TouchableOpacity>
       </View>
 
-      {/* Right Sidebar */}
-      <View style={{ width: 340, padding: 24, backgroundColor: colors.background, alignSelf: 'stretch' }}>
-                  <View style={[styles.sidebarBox, { backgroundColor: colors.cardAlt, borderColor: colors.border }]}>
-                      <Text style={[styles.sectionTitle, {color: colors.primary }]}>Time Capsules</Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.horizontalScroll} contentContainerStyle={styles.horizontalScrollContent}>
-                      {publicCapsules.map(c => (
-                        <TouchableOpacity key={c.id} style={styles.capsuleCard} onPress={() => {
-                          if (new Date(c.openDate) <= new Date()) {
-                            router.push({ pathname: '/(capsule)/view', params: { id: c.id } });
-                          } else {
-                            setLockedCapsuleId(c.id);
-                            setTimeout(() => setLockedCapsuleId(null), 2500);
-                          }
-                        }}>
-                          <Image source={{ uri: c.coverUrl }} style={styles.capsuleImage} />
-                          <View>
-                            <Text style={styles.capsuleTitle}>{c.title}</Text>
-                            <Text style={styles.capsuleDate}>Opens: {new Date(c.openDate).toLocaleDateString()}</Text>
-                          </View>
-                          {lockedCapsuleId === c.id && (
-                            <Text style={{ color: 'red', fontSize: 12, marginTop: 4 }}>This time capsule is still locked</Text>
-                          )}
-                        </TouchableOpacity>
-                      ))}
-                    </ScrollView>
+      {/* Search Results Dropdown (floating above all content) */}
+      {showSearchBar && searchResults && (
+        <View style={{
+          position: 'absolute',
+          top: dropdownPos.top,
+          left: dropdownPos.left,
+          width: dropdownPos.width,
+          backgroundColor: colors.card,
+          zIndex: 9999,
+          borderRadius: 8,
+          padding: 8,
+          maxHeight: 400,
+          boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
+          pointerEvents: 'auto',
+        }}>
+          {/* Users */}
+          {searchResults.users.length > 0 && (
+            <>
+              <Text style={{ fontWeight: 'bold', marginBottom: 4, color: colors.primary }}>Users</Text>
+              {searchResults.users.map(user => (
+                <TouchableOpacity key={user.id} onPress={() => handleUserSelect(user.userName)} style={{ paddingVertical: 6 }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                    <Image source={{ uri: user.profilePictureUrl }} style={{ width: 32, height: 32, borderRadius: 16, marginRight: 8 }} />
+                    <Text style={{ color: colors.text }}>{user.userName} ({user.firstName} {user.lastName})</Text>
                   </View>
-        <View style={[styles.sidebarBox, { backgroundColor: colors.cardAlt, borderColor: colors.border, marginTop: 32 }]}> 
-                      <Text style={[styles.sectionTitle, {color: colors.primary }]}>People You May Know</Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.horizontalScroll} contentContainerStyle={styles.horizontalScrollContent}>
-                      {people.map(p => (
-                        <View key={p.id} style={[styles.userCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-                          <Image source={{ uri: p.avatarUrl }} style={styles.avatarLarge} />
-                          <Text style={styles.username}>{p.username}</Text>
-                          <TouchableOpacity style={[styles.addFriendBtn]}>
-                            <Text style={styles.addFriendBtnText}>Add Friend</Text>
-                          </TouchableOpacity>
-                        </View>
-                      ))}
-                    </ScrollView>
+                </TouchableOpacity>
+              ))}
+            </>
+          )}
+          {/* Hashtags */}
+          {searchResults.hashtags.length > 0 && (
+            <>
+              <Text style={{ fontWeight: 'bold', marginTop: 8, marginBottom: 4, color: colors.primary }}>Hashtags</Text>
+              {searchResults.hashtags.map((hashtag, idx) => (
+                <Text key={idx} style={{ color: colors.text }}>#{hashtag.tag} ({hashtag.count})</Text>
+              ))}
+            </>
+          )}
+          {/* Groups */}
+          {searchResults.groups.length > 0 && (
+            <>
+              <Text style={{ fontWeight: 'bold', marginTop: 8, marginBottom: 4, color: colors.primary }}>Groups</Text>
+              {searchResults.groups.map(group => (
+                <TouchableOpacity key={group.id} onPress={() => router.push(`/groups/${group.id}`)} style={{ paddingVertical: 6 }}>
+                  <Text style={{ color: colors.text }}>{group.name} ({group.memberCount} members)</Text>
+                </TouchableOpacity>
+              ))}
+            </>
+          )}
+          {/* No results */}
+          {searchResults.users.length === 0 && searchResults.hashtags.length === 0 && searchResults.groups.length === 0 && (
+            <Text style={{ color: colors.textSecondary }}>No results found.</Text>
+          )}
+        </View>
+      )}
+
+      {/* Main Content Row: Feed + Sidebar */}
+      <View style={{ flex: 1, flexDirection: 'row', backgroundColor: colors.background }}>
+        {/* Center Feed (centered) */}
+        <View style={{
+          flex: 1,
+          maxWidth: 700,
+          marginLeft: 'auto',
+          marginRight: 'auto',
+          borderRightWidth: 1,
+          borderRightColor: colors.border,
+          borderLeftWidth: 1,
+          borderLeftColor: colors.border,
+          backgroundColor: colors.background,
+          paddingHorizontal: 16,
+          paddingVertical: 24,
+        }}>
+          {/* Feed Tabs */}
+          <View style={styles.feedTabs}>
+            <TouchableOpacity 
+              style={[styles.feedTab, feedTab === 'for-you' && styles.activeFeedTab]}
+              onPress={() => setFeedTab('for-you')}
+            >
+              <Text style={[styles.feedTabText, feedTab === 'for-you' && styles.activeFeedTabText]}>
+                For You
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity 
+              style={[styles.feedTab, feedTab === 'following' && styles.activeFeedTab]}
+              onPress={() => setFeedTab('following')}
+            >
+              <Text style={[styles.feedTabText, feedTab === 'following' && styles.activeFeedTabText]}>
+                Following
+              </Text>
+            </TouchableOpacity>
+          </View>
+
+          <ScrollView showsVerticalScrollIndicator={false} style={{ flex: 1, marginTop: 16 }}>
+            {renderFeed()}
+          </ScrollView>
+        </View>
+
+        {/* Right Sidebar */}
+        <View style={{ 
+          width: 340, 
+          padding: 24, 
+          backgroundColor: colors.background, 
+          borderLeftWidth: 1,
+          borderLeftColor: colors.border,
+        }}>
+          <View style={[styles.sidebarBox, { backgroundColor: colors.cardAlt, borderColor: colors.border }]}> 
+            <Text style={[styles.sectionTitle, {color: colors.primary }]}>Time Capsules</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.horizontalScroll} contentContainerStyle={styles.horizontalScrollContent}>
+              {publicCapsules.map(c => (
+                <TouchableOpacity key={c.id} style={styles.capsuleCard} onPress={() => {
+                  if (new Date(c.openDate) <= new Date()) {
+                    router.push({ pathname: '/(capsule)/view', params: { id: c.id } });
+                  } else {
+                    setLockedCapsuleId(c.id);
+                    setTimeout(() => setLockedCapsuleId(null), 2500);
+                  }
+                }}>
+                  <Image source={{ uri: c.coverUrl }} style={styles.capsuleImage} />
+                  <View>
+                    <Text style={styles.capsuleTitle}>{c.title}</Text>
+                    <Text style={styles.capsuleDate}>Opens: {new Date(c.openDate).toLocaleDateString()}</Text>
                   </View>
+                  {lockedCapsuleId === c.id && (
+                    <Text style={{ color: 'red', fontSize: 12, marginTop: 4 }}>This time capsule is still locked</Text>
+                  )}
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
+          <View style={[styles.sidebarBox, { backgroundColor: colors.cardAlt, borderColor: colors.border, marginTop: 32 }]}> 
+            <Text style={[styles.sectionTitle, {color: colors.primary }]}>People You May Know</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.horizontalScroll} contentContainerStyle={styles.horizontalScrollContent}>
+              {people.map(p => (
+                <View key={p.id} style={[styles.userCard, { backgroundColor: colors.card, borderColor: colors.border }]}> 
+                  <Image source={{ uri: p.avatarUrl }} style={styles.avatarLarge} />
+                  <Text style={styles.username}>{p.username}</Text>
+                  <TouchableOpacity style={[styles.addFriendBtn]}>
+                    <Text style={styles.addFriendBtnText}>Add Friend</Text>
+                  </TouchableOpacity>
                 </View>
-              </View>
+              ))}
+            </ScrollView>
+          </View>
+        </View>
+      </View>
+    </View>
   );
 }

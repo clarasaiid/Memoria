@@ -14,6 +14,8 @@ const PROFILE_SIZE = 110;
 
 const fallbackCover = 'https://images.unsplash.com/photo-1506744038136-46273834b3fb';
 
+export const options = { headerShown: false };
+
 export default function ProfileScreen() {
   const { width } = useWindowDimensions();
   const [photoModal, setPhotoModal] = useState({ visible: false, uri: '' });

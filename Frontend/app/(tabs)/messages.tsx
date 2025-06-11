@@ -7,6 +7,8 @@ import { useTheme } from '../../components/ThemeProvider';
 import { apiService } from '../services/api';
 import StoriesContainer from '../../components/StoriesContainer';
 
+export const options = { headerShown: false };
+
 export default function MessagesScreen() {
   const [conversations, setConversations] = useState<any[]>([]);
   const [stories, setStories] = useState<any[]>([]);

@@ -113,7 +113,7 @@ export default function SidebarLayout({ children }: { children: React.ReactNode 
 
   return (
     <View style={{ flex: 1, flexDirection: 'row' }}>
-      {/* Sidebar */}
+
       <View style={{
         width: SIDEBAR_WIDTH,
         backgroundColor: colors.card,
@@ -124,7 +124,7 @@ export default function SidebarLayout({ children }: { children: React.ReactNode 
         borderRightColor: colors.border,
         minHeight: '100%',
       }}>
-        {/* Profile Section */}
+
         <View style={{ alignItems: 'center', width: '100%', marginBottom: 32 }}>
           <Text style={{
             color: colors.primary,
@@ -144,7 +144,7 @@ export default function SidebarLayout({ children }: { children: React.ReactNode 
             {sidebarUser?.userName || 'User'}
           </Text>
         </View>
-        {/* Navigation Items */}
+   
         <View style={{ width: '100%' }}>
           {NAV_ITEMS.map(item => (
             <Pressable
@@ -169,14 +169,14 @@ export default function SidebarLayout({ children }: { children: React.ReactNode 
             </Pressable>
           ))}
         </View>
-        {/* Create Button */}
+
         <TouchableOpacity
           style={[styles.createButton, { backgroundColor: colors.primary }]}
           onPress={() => setShowModal(true)}
         >
           <PlusSquare size={24} color={colors.buttonText} />
         </TouchableOpacity>
-        {/* Create Modal */}
+
         <Modal
           visible={showModal}
           transparent

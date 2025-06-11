@@ -560,4 +560,6 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     marginBottom: 12,
   },
-}); 
+});
+
+export const options = { headerShown: false }; 
