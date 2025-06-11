@@ -50,7 +50,7 @@ export default function ProfileDetailsScreen() {
         coverPhotoUrl,
       });
       // Fetch the current user info to get the username
-      const me = await apiService.get('/auth/me');
+      const me = await apiService.get('/api/auth/me');
       router.replace('/(tabs)/profile');
     } catch (error) {
       setMessage('Failed to save profile details. Please try again.');

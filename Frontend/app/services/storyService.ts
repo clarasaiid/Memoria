@@ -25,7 +25,7 @@ class StoryService {
     
     // Then create the story post
     const imagePath = imageUrl.replace('http://localhost:7000', '');
-    const response = await apiService.post('/posts', {
+    const response = await apiService.post('/api/posts', {
       ImageUrl: imagePath,
       Content: caption || "",
       IsStory: true,
@@ -35,12 +35,12 @@ class StoryService {
   }
 
   async getStories(): Promise<Story[]> {
-    const posts = await apiService.get('/posts/stories');
+    const posts = await apiService.get('/api/posts/stories');
     return (posts as any[]).map(post => this.formatStory(post));
   }
 
   async getStory(id: string): Promise<Story> {
-    const post = await apiService.get(`/posts/${id}`);
+    const post = await apiService.get(`/api/posts/${id}`);
     return this.formatStory(post);
   }
 

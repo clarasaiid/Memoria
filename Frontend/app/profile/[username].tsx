@@ -7,6 +7,7 @@ import { apiService } from '../services/api';
 import { useTheme } from '../../components/ThemeProvider';
 import FriendRequestButton from '../components/FriendRequestButton';
 import MessageButton from '../components/MessageButton';
+import * as signalR from '@microsoft/signalr';
 
 const COVER_HEIGHT = 220;
 const PROFILE_SIZE = 110;
@@ -46,45 +47,66 @@ export default function PublicProfileScreen() {
   const fetchProfile = async () => {
     setLoading(true);
     setError('');
+    let res: any = null;
     try {
-      const res = await apiService.get(`/users/username/${username}`) as any;
+      console.log('Fetching profile for', username);
+      res = await apiService.get(`/api/users/username/${username}`) as any;
+      console.log('Profile response:', res);
       setProfile(res);
-      const followersRes = await apiService.get(`/users/${res.id}/followers`) as any[];
+      const followersRes = await apiService.get(`/api/users/${res.id}/followers`) as any[];
       setFollowers(followersRes);
-      const followingRes = await apiService.get(`/users/${res.id}/following`) as any[];
+      const followingRes = await apiService.get(`/api/users/${res.id}/following`) as any[];
       setFollowing(followingRes);
-      const friendsRes = await apiService.get(`/users/${res.id}/friends`) as any[];
+      const friendsRes = await apiService.get(`/api/users/${res.id}/friends`) as any[];
       setFriends(friendsRes);
+      // Fetch posts for this user
+      const postsRes = await apiService.get('/api/posts') as any[];
+      const userPosts = postsRes.filter((p: any) => p.user?.id === res.id && !p.isArchived);
+      setPosts(userPosts);
       // Relationship
-      const relationshipRes = await apiService.get(`/users/${res.id}/relationship`) as any;
+      const relationshipRes = await apiService.get(`/api/users/${res.id}/relationship`) as any;
       setIsFollowing(relationshipRes.isFollowing);
       setIsFriend(relationshipRes.isFriend);
       setIsBlocked(relationshipRes.isBlocked);
       setHasBlocked(relationshipRes.hasBlocked);
-      // Pending friend request logic
-      const requests = await apiService.get('/api/friend-requests') as any[];
-      // Outgoing pending request: current user sent a request to this profile
-      const outgoingPending = requests.some((req: any) => req.UserId === currentUser?.id && req.FriendId === res.id && !req.Accepted);
-      setPendingFriend(outgoingPending);
-      // Incoming pending request: this profile sent a request to current user
-      const incomingPending = requests.some((req: any) => req.UserId === res.id && req.FriendId === currentUser?.id && !req.Accepted);
-      setIncomingRequest(incomingPending);
-      // FriendshipId for removal
-      const friendship = requests.find((f: any) =>
-        ((f.UserId === res.id && f.FriendId === currentUser?.id) || (f.UserId === currentUser?.id && f.FriendId === res.id)) && f.Accepted
-      );
-      setFriendshipId(friendship ? friendship.id : null);
     } catch (e: any) {
+      console.error('Error fetching profile:', e);
       setError('User not found');
       setProfile(null);
+      setLoading(false);
+      setUiReady(true);
+      return;
+    }
+    // Friend requests fetch (optional)
+    try {
+      if (res && currentUser) {
+        const requests = await apiService.get(`/api/friendships/incoming`) as any[];
+        // Outgoing pending request: current user sent a request to this profile
+        const outgoingPending = requests.some((req: any) => req.UserId === currentUser?.id && req.FriendId === res.id && !req.Accepted);
+        setPendingFriend(outgoingPending);
+        // Incoming pending request: this profile sent a request to current user
+        const incomingPending = requests.some((req: any) => req.UserId === res.id && req.FriendId === currentUser?.id && !req.Accepted);
+        setIncomingRequest(incomingPending);
+        // FriendshipId for removal
+        const friendship = requests.find((f: any) =>
+          ((f.UserId === res.id && f.FriendId === currentUser?.id) || (f.UserId === currentUser?.id && f.FriendId === res.id)) && f.Accepted
+        );
+        setFriendshipId(friendship ? friendship.id : null);
+      }
+    } catch (e) {
+      console.error('Error fetching friend requests:', e);
     } finally {
       setLoading(false);
       setUiReady(true);
+      console.log('Done loading');
     }
   };
 
   useEffect(() => {
-    apiService.get('/auth/me').then((me: any) => setCurrentUser(me.profile));
+    apiService.get('/api/auth/me').then((me: any) => {
+      setCurrentUser(me.profile);
+      console.log('Current user:', me.profile);
+    });
   }, []);
 
   useEffect(() => {
@@ -92,24 +114,48 @@ export default function PublicProfileScreen() {
     // eslint-disable-next-line
   }, [username, currentUser]);
 
+  // SignalR connection for real-time follow/follow_request notifications
+  useEffect(() => {
+    const connection = new signalR.HubConnectionBuilder()
+      .withUrl('http://localhost:7000/chatHub', { withCredentials: true })
+      .withAutomaticReconnect()
+      .build();
+    connection.start()
+      .then(() => {
+        connection.on('ReceiveNotification', (notification) => {
+          if (notification.type === 'follow' && notification.senderId === profile?.id) {
+            setIsFollowing(true);
+            setFollowRequestPending(false);
+          }
+          if (notification.type === 'follow_request' && notification.senderId === profile?.id) {
+            setFollowRequestPending(true);
+          }
+        });
+      })
+      .catch(console.error);
+    return () => {
+      connection.stop();
+    };
+  }, [profile?.id]);
+
   // Unified button handlers
   const handleFollow = async () => {
     if (!profile || isLoadingAction) return;
     setIsLoadingAction(true);
-    y {
+    try {
       if (isFollowing) {
-        await apiService.delete(⁠ /users/${profile.id}/follow ⁠);
+        await apiService.delete(`/api/users/${profile.id}/follow`);
         setIsFollowing(false);
         setFollowRequestPending(false);
       } else {
-        const res = await apiService.post(⁠ /users/${profile.id}/follow ⁠, {});
+        const res: any = await apiService.post(`/api/users/${profile.id}/follow`, {});
         if (res.status === 'pending') {
           setFollowRequestPending(true);
         } else {
           setIsFollowing(true);
         }
       }
-      await fetchProfile();
+      // No fetchProfile() here to avoid full reload
     } catch (error) {
       console.error('Error toggling follow:', error);
     } finally {
@@ -121,12 +167,12 @@ export default function PublicProfileScreen() {
     setIsLoadingAction(true);
     try {
       if (isFriend && friendshipId) {
-        await apiService.delete(`/api/friend-requests/${friendshipId}`);
+        await apiService.delete(`/api/friendships/${friendshipId}`);
         setIsFriend(false);
         setFriendshipId(null);
       } else if (!isFriend && !pendingFriend && !incomingRequest) {
-        const me = await apiService.get('/auth/me') as any;
-        await apiService.post('/api/friend-requests', {
+        const me = await apiService.get('/api/auth/me') as any;
+        await apiService.post('/api/friendships', {
           UserId: me.profile.id,
           FriendId: profile.id,
           Accepted: false
@@ -147,10 +193,10 @@ export default function PublicProfileScreen() {
     setIsLoadingAction(true);
     try {
       if (hasBlocked) {
-        await apiService.delete(`/users/${profile.id}/block`);
+        await apiService.delete(`/api/users/${profile.id}/block`);
         setHasBlocked(false);
       } else {
-        await apiService.post(`/users/${profile.id}/block`, {});
+        await apiService.post(`/api/users/${profile.id}/block`, {});
         setHasBlocked(true);
       }
       setMoreModal(false);
@@ -179,10 +225,10 @@ export default function PublicProfileScreen() {
     setIsLoadingAction(true);
     try {
       // Find the incoming request id
-      const requests = await apiService.get('/api/friend-requests') as any[];
+      const requests = await apiService.get('/api/friendships/incoming') as any[];
       const incoming = requests.find((req: any) => req.UserId === profile.id && req.FriendId === currentUser?.id && !req.Accepted);
       if (incoming) {
-        await apiService.post(`/api/friend-requests/${incoming.id}/accept`, {});
+        await apiService.post(`/api/friendships/${incoming.id}/accept`, {});
         setIsFriend(true);
         setIncomingRequest(false);
         setPendingFriend(false);
@@ -199,10 +245,10 @@ export default function PublicProfileScreen() {
     setIsLoadingAction(true);
     try {
       // Find the incoming request id
-      const requests = await apiService.get('/api/friend-requests') as any[];
+      const requests = await apiService.get('/api/friendships/incoming') as any[];
       const incoming = requests.find((req: any) => req.UserId === profile.id && req.FriendId === currentUser?.id && !req.Accepted);
       if (incoming) {
-        await apiService.post(`/api/friend-requests/${incoming.id}/decline`, {});
+        await apiService.post(`/api/friendships/${incoming.id}/decline`, {});
         setIncomingRequest(false);
       }
       await fetchProfile();
@@ -368,7 +414,69 @@ export default function PublicProfileScreen() {
           </View>
         </View>
         <View style={{ marginTop: 12 }} />
-        {/* You can add posts display here if you fetch posts for the user */}
+        
+        {viewMode === 'grid' ? (
+          <FlatList
+            data={posts}
+            numColumns={3}
+            keyExtractor={item => item.id.toString()}
+            renderItem={({ item }) => (
+              <TouchableOpacity 
+                onPress={() => router.push({ pathname: '/post/[id]', params: { id: item.id.toString() } })}
+                style={{ flex: 1/3, aspectRatio: 1, padding: 1 }}
+              >
+                <Image
+                  source={{ uri: item.imageUrl }}
+                  style={{
+                    width: '100%',
+                    height: '100%',
+                    backgroundColor: colors.card,
+                  }}
+                />
+              </TouchableOpacity>
+            )}
+            style={{ marginBottom: 20 }}
+          />
+        ) : (
+          <FlatList
+            data={posts}
+            keyExtractor={item => item.id.toString()}
+            renderItem={({ item }) => (
+              <View style={[styles.postCard, { backgroundColor: colors.card }]}>
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 8 }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                    <Image source={{ uri: profile.profilePictureUrl }} style={{ width: 32, height: 32, borderRadius: 16, marginRight: 8 }} />
+                    <View>
+                      <Text style={{ fontSize: 14, color: colors.text, fontWeight: 'bold' }}>{profile.username}</Text>
+                      <Text style={{ fontSize: 12, color: colors.textSecondary }}>{profile.bio || ' '}</Text>
+                    </View>
+                  </View>
+                </View>
+                <TouchableOpacity onPress={() => router.push({ pathname: '/post/[id]', params: { id: item.id.toString() } })}>
+                  <Image 
+                    source={{ uri: item.imageUrl }} 
+                    style={{ 
+                      width: '100%', 
+                      aspectRatio: 1, 
+                      maxWidth: 470, 
+                      maxHeight: 470, 
+                      resizeMode: 'contain', 
+                      backgroundColor: colors.card 
+                    }} 
+                  />
+                </TouchableOpacity>
+                <View style={{ padding: 12 }}>
+                  <Text style={{ color: colors.text, fontSize: 14 }}>{item.content}</Text>
+                  <View style={{ flexDirection: 'row', marginTop: 8 }}>
+                    <Text style={{ color: colors.textSecondary, fontSize: 12 }}>{item.reactions?.length || 0} likes</Text>
+                    <Text style={{ color: colors.textSecondary, fontSize: 12, marginLeft: 12 }}>{item.comments?.length || 0} comments</Text>
+                  </View>
+                </View>
+              </View>
+            )}
+            style={{ marginBottom: 20 }}
+          />
+        )}
 
         {/* Photo Modal */}
         <Modal visible={photoModal.visible} transparent animationType="fade">
@@ -447,5 +555,9 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     gap: 8,
   },
-  
+  postCard: {
+    borderRadius: 12,
+    overflow: 'hidden',
+    marginBottom: 12,
+  },
 }); 

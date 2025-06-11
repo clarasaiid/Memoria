@@ -31,31 +31,31 @@ export const notificationsService = {
 
   // Mark a notification as read
   async markNotificationAsRead(id: string): Promise<void> {
-    return apiService.put(`/api/notifications/${id}/read`, {});
+    return apiService.put(`/notifications/${id}/read`, {});
   },
 
   // Get pending friend requests
   async getFriendRequests(): Promise<FriendRequest[]> {
-    return apiService.get('/api/friend-requests/incoming'); // adjust as needed
+    return apiService.get('/api/friendships/incoming');
   },
 
   // Accept or decline a friend request
   async handleFriendRequest(id: string, accept: boolean): Promise<void> {
-    return apiService.put(`/api/friend-requests/${id}`, { accept });
+    return apiService.put(`/api/friendships/${id}`, { accept });
   },
 
   // Get current user profile
   async getMe(): Promise<{ profile: any }> {
-    return apiService.get('/auth/me');
+    return apiService.get('/api/auth/me');
   },
 
   // Get follow requests (for private accounts)
   async getFollowRequests(): Promise<Notification[]> {
-    return apiService.get('/api/follow-requests/incoming'); // implement backend if needed
+    return apiService.get('/users/me/follow-requests');
   },
 
   // Accept or decline a follow request
   async handleFollowRequest(id: string, accept: boolean): Promise<void> {
-    return apiService.post(`/api/follow-requests/${id}/${accept ? 'accept' : 'decline'}`, {});
+    return apiService.post(`/api/users/follow-requests/${id}/${accept ? 'accept' : 'decline'}`, {});
   },
 };

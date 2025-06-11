@@ -22,7 +22,7 @@ export default function GroupScreen() {
       try {
         const [groupData, postsData] = await Promise.all([
           apiService.get(`/api/groups/${id}`),
-          apiService.get(`/api/groups/${id}/posts`)
+          apiService.get(`/api/groups/${id}/api/posts`)
         ]);
         setGroup(groupData);
         setPosts(postsData);

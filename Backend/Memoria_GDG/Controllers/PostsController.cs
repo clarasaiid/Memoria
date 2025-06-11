@@ -26,7 +26,7 @@ namespace Memoria_GDG.Controllers
             public bool IsStory { get; set; }
         }
 
-        // GET /posts
+        // GET /api/posts
         [HttpGet]
         public async Task<ActionResult<IEnumerable<Post>>> GetPosts()
         {

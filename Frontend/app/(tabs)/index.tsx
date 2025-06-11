@@ -109,7 +109,7 @@ export default function HomePage() {
   useEffect(() => {
     const fetchPosts = async () => {
       try {
-        const response = await apiService.get('/posts');
+        const response = await apiService.get('/api/posts');
         const posts = response
           .filter((post: any) => !post.isArchived)
           .map((post: any) => ({
@@ -685,7 +685,7 @@ export default function HomePage() {
   const handleArchivePost = async () => {
     if (!selectedPostId) return;
     try {
-      await apiService.put(`/posts/archive/${selectedPostId}`, {});
+      await apiService.put(`/api/posts/archive/${selectedPostId}`, {});
       // Update all feeds
       setFeed(prev => prev.filter(post => post.id !== selectedPostId));
       setFollowingFeed(prev => prev.filter(post => post.id !== selectedPostId));
@@ -703,7 +703,7 @@ export default function HomePage() {
   const handleDeletePost = async () => {
     if (!selectedPostId) return;
     try {
-      await apiService.delete(`/posts/${selectedPostId}`);
+      await apiService.delete(`/api/posts/${selectedPostId}`);
       // Update all feeds
       setFeed(prev => prev.filter(post => post.id !== selectedPostId));
       setFollowingFeed(prev => prev.filter(post => post.id !== selectedPostId));

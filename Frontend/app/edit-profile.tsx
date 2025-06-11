@@ -107,7 +107,7 @@ export default function EditProfileScreen() {
 
   const fetchProfile = useCallback(async () => {
     try {
-      const response = await apiService.get<ProfileResponse>('/auth/me');
+      const response = await apiService.get<ProfileResponse>('/api/auth/me');
       console.log("Email from API response in fetchProfile:", response.profile.email);
       setOriginalData({
         username: response.profile.username,

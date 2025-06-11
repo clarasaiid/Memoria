@@ -27,7 +27,7 @@ export default function LoginScreen() {
   
   const handleLogin = async () => {
     try {
-      const response = await apiService.post<AuthResponse>('/auth/login', {
+      const response = await apiService.post<AuthResponse>('/api/auth/login', {
         email: email,
         password: password
       });

@@ -321,53 +321,7 @@ namespace Memoria_GDG.Controllers
                 }
             }
 
-            return Ok();
-            
-            // Create notification for follow request if account is private
-            if (targetUser.IsPrivate)
-            {
-                var notification = new Notification
-                {
-                    UserId = id,
-                    Type = "follow_request",
-                    Content = $"@{User.Identity.Name} requested to follow you",
-                    CreatedAt = DateTime.UtcNow,
-                    Read = false
-                };
-                _context.Notifications.Add(notification);
-                await _context.SaveChangesAsync();
-            }
-
             return Ok(new { status = targetUser.IsPrivate ? "pending" : "accepted" });
-        }
-
-        // PUT /users/{id}/follow/accept
-        [HttpPut("{id}/follow/accept")]
-        [Authorize]
-        public async Task<IActionResult> AcceptFollowRequest(int id)
-        {
-            var currentUserId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier));
-            var follow = await _context.Follows
-                .FirstOrDefaultAsync(f => f.FollowerId == id && f.FollowingId == currentUserId && f.Status == FollowStatus.Pending);
-
-            if (follow == null) return NotFound("Follow request not found.");
-
-            follow.Status = FollowStatus.Accepted;
-            await _context.SaveChangesAsync();
-
-            // Create notification for accepted follow request
-            var notification = new Notification
-            {
-                UserId = id,
-                Type = "follow_accepted",
-                Content = $"@{User.Identity.Name} accepted your follow request",
-                CreatedAt = DateTime.UtcNow,
-                Read = false
-            };
-            _context.Notifications.Add(notification);
-            await _context.SaveChangesAsync();
-
-            return Ok(new { status = "accepted" });
         }
 
         // PUT /users/{id}/follow/reject
@@ -507,7 +461,7 @@ namespace Memoria_GDG.Controllers
 
             var requests = await _context.Follows
                 .Include(f => f.Follower)
-                .Where(f => f.FollowingId == userId && !f.Approved)
+                .Where(f => f.FollowingId == userId && f.Status == FollowStatus.Pending)
                 .Select(f => new {
                     id = f.Id,
                     type = "follow",
@@ -528,10 +482,10 @@ namespace Memoria_GDG.Controllers
             var follow = await _context.Follows.FindAsync(id);
             var userId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier));
             
-            if (follow == null || follow.FollowingId != userId || follow.Approved)
+            if (follow == null || follow.FollowingId != userId || follow.Status != FollowStatus.Pending)
                 return NotFound();
 
-            follow.Approved = true;
+            follow.Status = FollowStatus.Accepted;
             await _context.SaveChangesAsync();
 
             // Create follow notification (for private accounts)
@@ -568,10 +522,10 @@ namespace Memoria_GDG.Controllers
             var follow = await _context.Follows.FindAsync(id);
             var userId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier));
             
-            if (follow == null || follow.FollowingId != userId || follow.Approved)
+            if (follow == null || follow.FollowingId != userId || follow.Status != FollowStatus.Pending)
                 return NotFound();
 
-            _context.Follows.Remove(follow);
+            follow.Status = FollowStatus.Rejected;
             await _context.SaveChangesAsync();
             return NoContent();
         }   

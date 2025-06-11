@@ -34,11 +34,11 @@ export default function ProfileScreen() {
   const fetchProfileAndPosts = async () => {
     setLoading(true);
     try {
-      const res = await apiService.get('/auth/me') as any;
+      const res = await apiService.get('/api/auth/me') as any;
       setProfile(res.profile);
 
       // Fetch posts for this user
-      const postsRes: any[] = await apiService.get('/posts');
+      const postsRes: any[] = await apiService.get('/api/posts');
       const userPosts = postsRes.filter((p: any) => p.user?.id === res.profile.id && !p.isArchived);
       setPosts(userPosts);
 
@@ -89,7 +89,7 @@ export default function ProfileScreen() {
 
   const handleDeletePost = async (postId: number) => {
     try {
-      await apiService.delete(`/posts/${postId}`);
+      await apiService.delete(`/api/posts/${postId}`);
       setPosts(posts.filter((p) => p.id !== postId));
       setMenuVisible(false);
       setMenuPostId(null);
@@ -100,7 +100,7 @@ export default function ProfileScreen() {
 
   const handleArchivePost = async (postId: number) => {
     try {
-      await apiService.put(`/posts/archive/${postId}`);
+      await apiService.put(`/api/posts/archive/${postId}`);
       setPosts(posts.filter((p) => p.id !== postId));
       setMenuVisible(false);
       setMenuPostId(null);

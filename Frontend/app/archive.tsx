@@ -29,7 +29,7 @@ export default function ArchivePage() {
   const fetchArchivedContent = async () => {
     try {
       // Fetch archived posts
-      const postsResponse = await apiService.get('/posts/archive');
+      const postsResponse = await apiService.get('/api/posts/archive');
       const posts = postsResponse.map((post: any) => ({
         id: post.id,
         content: post.content,
@@ -52,7 +52,7 @@ export default function ArchivePage() {
 
   const handleUnarchive = async (postId: number) => {
     try {
-      await apiService.put(`/posts/unarchive/${postId}`, {});
+      await apiService.put(`/api/posts/unarchive/${postId}`, {});
       // Remove from archived lists
       setArchivedPosts(prev => prev.filter(post => post.id !== postId));
       setArchivedStories(prev => prev.filter(post => post.id !== postId));

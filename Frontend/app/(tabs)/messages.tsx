@@ -18,7 +18,7 @@ export default function MessagesScreen() {
 
   useEffect(() => {
     // Fetch current user and friends
-    apiService.get('/auth/me').then((me: any) => {
+    apiService.get('/api/auth/me').then((me: any) => {
       setCurrentUserId(me.profile.id);
       setFriends(me.friends || []);
     });
@@ -39,7 +39,7 @@ export default function MessagesScreen() {
     });
 
     // Fetch stories
-    apiService.get('/posts/stories').then((posts) => {
+    apiService.get('/api/posts/stories').then((posts) => {
       const formattedStories = (posts as any[]).map(post => ({
         id: post.id,
         imageUrl: post.imageUrl.startsWith('http') ? post.imageUrl : `http://localhost:7000${post.imageUrl}`,
@@ -53,7 +53,7 @@ export default function MessagesScreen() {
     });
 
     // Fetch time capsules
-    apiService.get('/timecapsules').then((capsules) => {
+    apiService.get('/api/timecapsule').then((capsules) => {
       setTimeCapsules(capsules as any[]);
     });
   }, [currentUserId]);
