@@ -29,6 +29,7 @@ export default function PublicProfileScreen() {
   const [search, setSearch] = useState('');
   const [error, setError] = useState('');
   const [isFollowing, setIsFollowing] = useState(false);
+  const [followRequestPending, setFollowRequestPending] = useState(false);
   const [isFriend, setIsFriend] = useState(false);
   const [isLoadingAction, setIsLoadingAction] = useState(false);
   const [friendshipId, setFriendshipId] = useState<string | null>(null);
@@ -95,23 +96,26 @@ export default function PublicProfileScreen() {
   const handleFollow = async () => {
     if (!profile || isLoadingAction) return;
     setIsLoadingAction(true);
-    try {
+    y {
       if (isFollowing) {
-        await apiService.delete(`/users/${profile.id}/follow`);
+        await apiService.delete(⁠ /users/${profile.id}/follow ⁠);
         setIsFollowing(false);
+        setFollowRequestPending(false);
       } else {
-        await apiService.post(`/users/${profile.id}/follow`, {});
-        setIsFollowing(true);
+        const res = await apiService.post(⁠ /users/${profile.id}/follow ⁠, {});
+        if (res.status === 'pending') {
+          setFollowRequestPending(true);
+        } else {
+          setIsFollowing(true);
+        }
       }
-      setIsFollowing(!isFollowing);
-
+      await fetchProfile();
     } catch (error) {
       console.error('Error toggling follow:', error);
     } finally {
       setIsLoadingAction(false);
     }
   };
-
   const handleFriend = async () => {
     if (!profile || isLoadingAction) return;
     setIsLoadingAction(true);
@@ -276,15 +280,13 @@ export default function PublicProfileScreen() {
                 <View style={{ flexDirection: 'row', gap: 12, marginTop: 16 }}>
                   {/* Follow/Unfollow */}
               <TouchableOpacity
-                style={[styles.button, { backgroundColor: isFollowing ? colors.primaryLight : colors.primary }]}
+                style={[styles.button,  { backgroundColor: isFollowing ? colors.primaryLight : followRequestPending ? colors.warning : colors.primary }
+                ]}
                 onPress={handleFollow}
                 disabled={isLoadingAction}
               >
-                {isFollowing ? (
-                  <UserCheck color={colors.buttonText} size={20} />
-                ) : (
-                  <UserPlus color={colors.buttonText} size={20} />
-                )}
+                {isFollowing ? <UserCheck color={colors.buttonText} size={20} /> : followRequestPending ? <UserMinus color={colors.buttonText} size={20} /> : <UserPlus color={colors.buttonText} size={20} />}
+
                 <Text
                   style={{
                     color: isFollowing ? colors.text : colors.buttonText,
@@ -293,7 +295,8 @@ export default function PublicProfileScreen() {
                     marginLeft: 6,
                   }}
                 >
-                  {isFollowing ? 'Unfollow' : 'Follow'}
+                  {isFollowing ? 'Unfollow' : followRequestPending ? 'Requested' : 'Follow'}
+
                 </Text>
               </TouchableOpacity>
 
