@@ -86,6 +86,7 @@ namespace Memoria_GDG.Controllers
                 UserId = dto.FriendId,
                 PostId = 0, // temp, will set below
                 Text = $"{fullName} (@{username}) sent you a friend request",
+                Content = $"{fullName} (@{username}) sent you a friend request",
                 SenderId = dto.UserId,
                 SenderAvatarUrl = avatarUrl,
                 SenderFullName = fullName,
@@ -136,6 +137,7 @@ namespace Memoria_GDG.Controllers
                     UserId = friendship.UserId,
                     PostId = friendship.Id,
                     Text = $"{friendship.Friend.FirstName} {friendship.Friend.LastName} (@{friendship.Friend.UserName}) accepted your friend request",
+                    Content = $"{friendship.Friend.FirstName} {friendship.Friend.LastName} (@{friendship.Friend.UserName}) accepted your friend request",
                     SenderId = friendship.FriendId,
                     SenderAvatarUrl = friendship.Friend.ProfilePictureUrl,
                     SenderFullName = $"{friendship.Friend.FirstName} {friendship.Friend.LastName}",
@@ -189,6 +191,7 @@ namespace Memoria_GDG.Controllers
                 UserId = friendship.UserId,
                 PostId = friendship.Id,
                 Text = $"{friendship.Friend.FirstName} {friendship.Friend.LastName} (@{friendship.Friend.UserName}) accepted your friend request",
+                Content = $"{friendship.Friend.FirstName} {friendship.Friend.LastName} (@{friendship.Friend.UserName}) accepted your friend request",
                 SenderId = friendship.FriendId,
                 SenderAvatarUrl = friendship.Friend.ProfilePictureUrl,
                 SenderFullName = $"{friendship.Friend.FirstName} {friendship.Friend.LastName}",

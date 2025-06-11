@@ -6,4 +6,4 @@ export default function IndexRedirect() {
     router.replace('/(auth)/login');
   }, []);
   return null;
-} 
+}

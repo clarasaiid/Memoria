@@ -15,7 +15,7 @@ export default function MessageButton({ targetUserId, targetUsername }: MessageB
 
   const handlePress = () => {
     router.push({
-      pathname: '/chat/[id]',
+      pathname: '/conversation/[id]',
       params: { id: targetUserId, username: targetUsername }
     });
   };

@@ -263,7 +263,13 @@ namespace Memoria_GDG.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("int");
 
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime(6)");
+
                     b.Property<int>("PostId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("Type")
                         .HasColumnType("int");
 
                     b.Property<int>("UserId")
@@ -342,9 +348,8 @@ namespace Memoria_GDG.Migrations
                         .IsRequired()
                         .HasColumnType("longtext");
 
-                    b.Property<string>("Birthday")
-                        .IsRequired()
-                        .HasColumnType("longtext");
+                    b.Property<DateTime?>("Birthday")
+                        .HasColumnType("datetime(6)");
 
                     b.Property<string>("ConcurrencyStamp")
                         .IsConcurrencyToken()
@@ -679,9 +684,8 @@ namespace Memoria_GDG.Migrations
                     b.Property<string>("Bio")
                         .HasColumnType("longtext");
 
-                    b.Property<string>("Birthday")
-                        .IsRequired()
-                        .HasColumnType("longtext");
+                    b.Property<DateTime?>("Birthday")
+                        .HasColumnType("datetime(6)");
 
                     b.Property<string>("Email")
                         .IsRequired()

@@ -280,6 +280,7 @@ namespace Memoria_GDG.Controllers
                         UserId = id,
                         SenderId = currentUserId,
                         Text = $"{fullName} (@{username}) started following you",
+                        Content = $"{fullName} (@{username}) started following you",
                         SenderAvatarUrl = follower.ProfilePictureUrl ?? string.Empty,
                         SenderFullName = fullName,
                         SenderUsername = username,
@@ -304,6 +305,7 @@ namespace Memoria_GDG.Controllers
                         UserId = id,
                         SenderId = currentUserId,
                         Text = $"{fullName} (@{username}) wants to follow you",
+                        Content = $"{fullName} (@{username}) wants to follow you",
                         SenderAvatarUrl = follower.ProfilePictureUrl ?? string.Empty,
                         SenderFullName = fullName,
                         SenderUsername = username,
@@ -501,6 +503,7 @@ namespace Memoria_GDG.Controllers
                 UserId = userId, // the user being followed
                 SenderId = follow.FollowerId,
                 Text = $"{fullName} (@{username}) started following you",
+                Content = $"{fullName} (@{username}) started following you",
                 SenderAvatarUrl = follower.ProfilePictureUrl,
                 SenderFullName = fullName,
                 SenderUsername = username,

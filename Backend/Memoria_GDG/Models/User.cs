@@ -8,7 +8,7 @@ namespace Memoria_GDG
     {
         public string FirstName { get; set; }
         public string LastName { get; set; }
-        public string Birthday { get; set; } 
+        public DateTime? Birthday { get; set; }
         public string Gender { get; set; }
         public string ProfilePictureUrl { get; set; }
         public string CoverPhotoUrl { get; set; } 

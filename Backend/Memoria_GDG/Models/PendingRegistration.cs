@@ -4,7 +4,7 @@ public class PendingRegistration
     public string Email { get; set; } = default!;
     public string FirstName { get; set; } = default!;
     public string LastName { get; set; } = default!;
-    public string Birthday { get; set; } = default!;
+    public DateTime? Birthday { get; set; } = default!;
     public string Gender { get; set; } = default!;
     public string? Bio { get; set; }
     public string? Username { get; set; }

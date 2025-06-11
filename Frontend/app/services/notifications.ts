@@ -41,7 +41,7 @@ export const notificationsService = {
 
   // Accept or decline a friend request
   async handleFriendRequest(id: string, accept: boolean): Promise<void> {
-    return apiService.put(`/api/friendships/${id}`, { accept });
+    return apiService.post(`/api/friendships/${id}/${accept ? 'accept' : 'decline'}`, {});
   },
 
   // Get current user profile

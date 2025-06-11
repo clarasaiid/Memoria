@@ -78,17 +78,44 @@ builder.Services.AddAuthentication(options =>
         ValidateAudience = true,
         ValidateLifetime = true,
         ValidateIssuerSigningKey = true,
-
         ValidIssuer = jwtSettings["Issuer"],
         ValidAudience = jwtSettings["Audience"],
         IssuerSigningKey = new SymmetricSecurityKey(key)
+    };
+
+    // Enable SignalR authentication via access_token and set UserIdentifier
+    options.Events = new JwtBearerEvents
+    {
+        OnMessageReceived = context =>
+        {
+            var accessToken = context.Request.Query["access_token"];
+            var path = context.HttpContext.Request.Path;
+            if (!string.IsNullOrEmpty(accessToken) && path.StartsWithSegments("/chatHub"))
+            {
+                context.Token = accessToken;
+            }
+            return Task.CompletedTask;
+        },
+        OnTokenValidated = context =>
+        {
+            var claimsIdentity = context.Principal.Identity as System.Security.Claims.ClaimsIdentity;
+            var userIdClaim = claimsIdentity?.FindFirst("sub") ?? claimsIdentity?.FindFirst("id") ?? claimsIdentity?.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier);
+            if (userIdClaim != null)
+            {
+                context.Principal.AddIdentity(new System.Security.Claims.ClaimsIdentity(new[]
+                {
+                    new System.Security.Claims.Claim(System.Security.Claims.ClaimTypes.NameIdentifier, userIdClaim.Value)
+                }));
+            }
+            return Task.CompletedTask;
+        }
     };
 });
 
 // Optional: if you're using cookies too
 builder.Services.ConfigureApplicationCookie(options =>
 {
-    options.LoginPath = "/auth/login";
+    options.LoginPath = "/api/auth/login";
     options.AccessDeniedPath = "/auth/access-denied";
 });
 

@@ -57,6 +57,10 @@ namespace Memoria_GDG.Controllers
         [HttpPost]
         public async Task<ActionResult<Notification>> CreateNotification(Notification notification)
         {
+            if (string.IsNullOrEmpty(notification.Content))
+            {
+                notification.Content = notification.Text ?? "";
+            }
             _context.Notifications.Add(notification);
             await _context.SaveChangesAsync();
             return CreatedAtAction(nameof(GetNotification), new { id = notification.Id }, notification);

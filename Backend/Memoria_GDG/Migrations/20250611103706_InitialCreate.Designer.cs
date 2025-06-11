@@ -10,8 +10,8 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace Memoria_GDG.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    [Migration("20250611052718_AddGroupIdToNotifications")]
-    partial class AddGroupIdToNotifications
+    [Migration("20250611103706_InitialCreate")]
+    partial class InitialCreate
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -266,7 +266,13 @@ namespace Memoria_GDG.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("int");
 
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime(6)");
+
                     b.Property<int>("PostId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("Type")
                         .HasColumnType("int");
 
                     b.Property<int>("UserId")
@@ -345,9 +351,8 @@ namespace Memoria_GDG.Migrations
                         .IsRequired()
                         .HasColumnType("longtext");
 
-                    b.Property<string>("Birthday")
-                        .IsRequired()
-                        .HasColumnType("longtext");
+                    b.Property<DateTime?>("Birthday")
+                        .HasColumnType("datetime(6)");
 
                     b.Property<string>("ConcurrencyStamp")
                         .IsConcurrencyToken()
@@ -682,9 +687,8 @@ namespace Memoria_GDG.Migrations
                     b.Property<string>("Bio")
                         .HasColumnType("longtext");
 
-                    b.Property<string>("Birthday")
-                        .IsRequired()
-                        .HasColumnType("longtext");
+                    b.Property<DateTime?>("Birthday")
+                        .HasColumnType("datetime(6)");
 
                     b.Property<string>("Email")
                         .IsRequired()

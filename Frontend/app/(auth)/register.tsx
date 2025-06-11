@@ -103,7 +103,7 @@ export default function RegisterScreen() {
       }
 
       console.log('Making API request to /auth/register');
-      const response = await apiService.post('/auth/register', {
+      const response = await apiService.post('/api/auth/register', {
         firstName,
         lastName: secondName,
         email,
@@ -126,7 +126,7 @@ export default function RegisterScreen() {
       setTimeout(() => {
         setRegisterMessage('');
         setRegisterMessageType('');
-        router.push({ pathname: '/verify-email', params: { email } });
+        router.push(`/verify-email?email=${encodeURIComponent(email)}`);
       }, 2000);
     } catch (error: any) {
       console.error('Registration error details:', error);
@@ -155,7 +155,7 @@ export default function RegisterScreen() {
     setCheckingUsername(true);
     const handler = setTimeout(async () => {
       try {
-        const res = await apiService.get(`/auth/check-username?username=${encodeURIComponent(username)}`);
+        const res = await apiService.get<{ available: boolean }>(`/api/auth/check-username?username=${encodeURIComponent(username)}`);
         setUsernameAvailable(res.available);
       } catch {
         setUsernameAvailable(null);
