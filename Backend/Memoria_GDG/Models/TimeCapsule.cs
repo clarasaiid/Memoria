@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using Memoria_GDG.Models;
 
 namespace Memoria_GDG
 {

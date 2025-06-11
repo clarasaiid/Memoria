@@ -5,7 +5,7 @@ using System.Threading.Tasks;
 using System.Collections.Generic;
 using Microsoft.AspNetCore.Authorization;
 using System.Security.Claims;
-
+using Memoria_GDG.Models;
 
 namespace Memoria_GDG.Controllers
 {

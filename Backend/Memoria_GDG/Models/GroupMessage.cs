@@ -1,4 +1,5 @@
 using System;
+using Memoria_GDG.Models;
 
 namespace Memoria_GDG
 {
@@ -11,5 +12,8 @@ namespace Memoria_GDG
         public User Sender { get; set; }
         public string Content { get; set; }
         public DateTime SentAt { get; set; }
+        public bool IsEdited { get; set; }
+        public DateTime? EditedAt { get; set; }
+        public int GroupId { get; set; }
     }
 } 

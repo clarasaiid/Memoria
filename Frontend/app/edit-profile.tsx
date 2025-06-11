@@ -108,30 +108,31 @@ export default function EditProfileScreen() {
   const fetchProfile = useCallback(async () => {
     try {
       const response = await apiService.get<ProfileResponse>('/api/auth/me');
-      console.log("Email from API response in fetchProfile:", response.profile.email);
+      const profileDataFromApi = response.data?.profile || response.profile; // fallback for old structure
+      console.log("Email from API response in fetchProfile:", profileDataFromApi?.email);
       setOriginalData({
-        username: response.profile.username,
-        email: response.profile.email,
+        username: profileDataFromApi?.username,
+        email: profileDataFromApi?.email,
       });
       setProfileData({
-        username: response.profile.username,
-        fullName: response.profile.name,
-        bio: response.profile.bio || '',
-        email: response.profile.email,
-        profilePictureUrl: response.profile.profilePictureUrl || null,
-        coverPhotoUrl: response.profile.coverPhotoUrl || null,
-        gender: response.profile.gender || '',
-        birthday: response.profile.birthday || '',
-        posts: response.profile.posts || [],
-        comments: response.profile.comments || [],
-        reactions: response.profile.reactions || [],
-        ownedGroups: response.profile.ownedGroups || [],
-        timeCapsules: response.profile.timeCapsules || [],
-        groupMessages: response.profile.groupMessages || [],
-        groupMemberships: response.profile.groupMemberships || [],
-        timeCapsuleViewers: response.profile.timeCapsuleViewers || [],
+        username: profileDataFromApi?.username,
+        fullName: profileDataFromApi?.name,
+        bio: profileDataFromApi?.bio || '',
+        email: profileDataFromApi?.email,
+        profilePictureUrl: profileDataFromApi?.profilePictureUrl || null,
+        coverPhotoUrl: profileDataFromApi?.coverPhotoUrl || null,
+        gender: profileDataFromApi?.gender || '',
+        birthday: profileDataFromApi?.birthday || '',
+        posts: profileDataFromApi?.posts || [],
+        comments: profileDataFromApi?.comments || [],
+        reactions: profileDataFromApi?.reactions || [],
+        ownedGroups: profileDataFromApi?.ownedGroups || [],
+        timeCapsules: profileDataFromApi?.timeCapsules || [],
+        groupMessages: profileDataFromApi?.groupMessages || [],
+        groupMemberships: profileDataFromApi?.groupMemberships || [],
+        timeCapsuleViewers: profileDataFromApi?.timeCapsuleViewers || [],
       });
-      console.log("Email in profileData state after setProfileData:", response.profile.email);
+      console.log("Email in profileData state after setProfileData:", profileDataFromApi?.email);
     } catch (error) {
       console.error('Error fetching profile:', error);
     }
@@ -325,7 +326,7 @@ export default function EditProfileScreen() {
 
       console.log("Sending update data:", updateData); // Debug log
 
-      await apiService.put('/users/me', updateData);
+      await apiService.put('/api/users/me', updateData);
       setMessage('Profile updated successfully!');
       setMessageType('success');
       await fetchProfile();
@@ -386,7 +387,7 @@ export default function EditProfileScreen() {
 
         {message ? (
           <View style={[styles.messageContainer, { backgroundColor: messageType === 'success' ? colors.success : colors.error }]}>
-            <Text style={[styles.messageText, { color: colors.buttonText }]}>{message}</Text>
+            <Text style={[styles.messageText, { color: colors.buttonText }]}>{typeof message === 'string' ? message : JSON.stringify(message)}</Text>
           </View>
         ) : null}
 

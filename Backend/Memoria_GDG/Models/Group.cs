@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
 
-namespace Memoria_GDG
+namespace Memoria_GDG.Models
 {
     public class Group
     {
@@ -12,5 +12,8 @@ namespace Memoria_GDG
         public User Owner { get; set; }
         public DateTime CreatedAt { get; set; }
         public ICollection<GroupMembership> Memberships { get; set; }
+        public int CreatedById { get; set; }
+        public ICollection<GroupMember> Members { get; set; }
+        public ICollection<GroupMessage> GroupMessages { get; set; }
     }
 } 

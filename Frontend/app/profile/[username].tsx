@@ -426,7 +426,7 @@ export default function PublicProfileScreen() {
                 style={{ flex: 1/3, aspectRatio: 1, padding: 1 }}
               >
                 <Image
-                  source={{ uri: item.imageUrl }}
+                  source={{ uri: item.imageUrl ? (item.imageUrl.startsWith('http') ? item.imageUrl : `http://localhost:7000${item.imageUrl}`) : undefined }}
                   style={{
                     width: '100%',
                     height: '100%',
@@ -454,7 +454,7 @@ export default function PublicProfileScreen() {
                 </View>
                 <TouchableOpacity onPress={() => router.push({ pathname: '/post/[id]', params: { id: item.id.toString() } })}>
                   <Image 
-                    source={{ uri: item.imageUrl }} 
+                    source={{ uri: item.imageUrl ? (item.imageUrl.startsWith('http') ? item.imageUrl : `http://localhost:7000${item.imageUrl}`) : undefined }} 
                     style={{ 
                       width: '100%', 
                       aspectRatio: 1, 

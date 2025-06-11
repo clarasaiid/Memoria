@@ -1,5 +1,6 @@
 using System;
 using Memoria_GDG;
+using Memoria_GDG.Models;
 using System;
 public class Notification
 {

@@ -9,6 +9,7 @@ using System.Security.Claims;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.SignalR;
 using Memoria_GDG.Hubs;
+using Memoria_GDG.Models;
 
 namespace Memoria_GDG.Controllers
 {

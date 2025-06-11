@@ -1,6 +1,7 @@
 using System;
+using Memoria_GDG.Models;
 
-namespace Memoria_GDG
+namespace Memoria_GDG.Models
 {
     public class GroupMembership
     {

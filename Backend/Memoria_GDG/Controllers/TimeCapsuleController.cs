@@ -7,10 +7,11 @@ using Microsoft.AspNetCore.Authorization;
 using System.Security.Claims;
 using System.Linq;
 using System;
+using Memoria_GDG.Models;
+using Memoria_GDG.Dtos;
 
 namespace Memoria_GDG.Controllers
 {
-    [ApiController]
     [Route("api/[controller]")]
     public class TimeCapsuleController : ControllerBase
     {
@@ -49,12 +50,18 @@ namespace Memoria_GDG.Controllers
         // POST 
         [HttpPost]
         [Authorize]
-        public async Task<ActionResult<TimeCapsule>> CreateTimeCapsule(TimeCapsule capsule, [FromQuery] List<int> viewerIds)
+        public async Task<ActionResult<TimeCapsule>> CreateTimeCapsule(TimeCapsuleDto dto, [FromQuery] List<int> viewerIds)
         {
             var userId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier));
-            capsule.OwnerId = userId;
-            capsule.CreatedAt = DateTime.UtcNow;
-            capsule.Viewers = viewerIds?.Select(id => new TimeCapsuleViewer { UserId = id }).ToList();
+            var capsule = new TimeCapsule
+            {
+                Title = dto.Title,
+                Content = dto.Content,
+                OpenAt = dto.OpenAt,
+                OwnerId = userId,
+                CreatedAt = DateTime.UtcNow,
+                Viewers = viewerIds?.Select(id => new TimeCapsuleViewer { UserId = id }).ToList()
+            };
             _context.TimeCapsules.Add(capsule);
             await _context.SaveChangesAsync();
             return CreatedAtAction(nameof(GetTimeCapsule), new { id = capsule.Id }, capsule);
