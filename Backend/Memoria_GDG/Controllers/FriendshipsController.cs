@@ -229,7 +229,7 @@ namespace Memoria_GDG.Controllers
             return NoContent();
         }
 
-        // ✅ NEW: DELETE /api/friend-requests/{id}/revoke
+        //DELETE /api/friend-requests/{id}/revoke
         [HttpDelete("{id}/revoke")]
         public async Task<IActionResult> RevokeFriendRequest(int id)
         {

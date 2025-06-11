@@ -63,13 +63,12 @@ export default function StoriesContainer({ onStoryCreated }: StoriesContainerPro
   };
 
   const handleStoryViewed = (storyId: string) => {
-    // Here you would typically update the story's viewed status in your backend
     console.log('Story viewed:', storyId);
   };
 
   const handleDeleteStory = async (storyId: string) => {
     try {
-      await apiService.delete(`/posts/${storyId}`);
+      await apiService.delete(`/api/posts/${storyId}`);
       // Refresh stories after deletion
       await loadStories();
       handleCloseStory();

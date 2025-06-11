@@ -19,7 +19,7 @@ export default function CreateTimeCapsulePage() {
     setLoading(true);
     setError('');
     try {
-      await apiService.post('/timecapsules', {
+      await apiService.post('/api/timecapsule', {
         title,
         content,
         openAt: openDate.toISOString(),

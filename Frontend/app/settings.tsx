@@ -19,7 +19,7 @@ export default function SettingsScreen() {
     useCallback(() => {
       const fetchPrivacy = async () => {
         try {
-          const res = await apiService.get('/auth/me') as any;
+          const res = await apiService.get('/api/auth/me') as any;
           setPrivateAccount(res.profile.isPrivate);
         } catch (e) {
           // handle error

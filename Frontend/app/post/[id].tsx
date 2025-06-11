@@ -17,7 +17,7 @@ export default function PostDetails() {
     const fetchPost = async () => {
       setLoading(true);
       try {
-        const res = await apiService.get(`/posts/${id}`);
+        const res = await apiService.get(`/api/posts/${id}`);
         setPost(res);
         setComments(res.comments || []);
       } catch (e) {

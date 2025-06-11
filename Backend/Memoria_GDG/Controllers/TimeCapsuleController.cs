@@ -46,7 +46,7 @@ namespace Memoria_GDG.Controllers
             return capsule;
         }
 
-        // POST /timecapsules
+        // POST 
         [HttpPost]
         [Authorize]
         public async Task<ActionResult<TimeCapsule>> CreateTimeCapsule(TimeCapsule capsule, [FromQuery] List<int> viewerIds)
@@ -60,7 +60,7 @@ namespace Memoria_GDG.Controllers
             return CreatedAtAction(nameof(GetTimeCapsule), new { id = capsule.Id }, capsule);
         }
 
-        // PUT /timecapsules/{id}
+        // PUT /{id}
         [HttpPut("{id}")]
         [Authorize]
         public async Task<IActionResult> UpdateTimeCapsule(int id, TimeCapsule capsule, [FromQuery] List<int> viewerIds)
@@ -81,7 +81,7 @@ namespace Memoria_GDG.Controllers
             return NoContent();
         }
 
-        // DELETE /timecapsules/{id}
+        // DELETE /{id}
         [HttpDelete("{id}")]
         [Authorize]
         public async Task<IActionResult> DeleteTimeCapsule(int id)

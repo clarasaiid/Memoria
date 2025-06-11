@@ -325,7 +325,7 @@ namespace Memoria_GDG.Controllers
             return Ok(new { available = user == null });
         }
 
-        // GET /auth/me
+        // GET /api/api/api/auth/me
         [HttpGet("me")]
         [Authorize]
         public async Task<IActionResult> GetMe()

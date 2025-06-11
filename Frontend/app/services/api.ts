@@ -1,8 +1,8 @@
 import { Platform } from 'react-native';
 import axios, { AxiosError, AxiosInstance } from 'axios';
 
-// Force HTTP for all environments during local development
-const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:7000/api';
+// ✅ Declare the base URL at the top (remove `/api` from it)
+const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:7000';
 
 console.log('API_BASE_URL:', API_BASE_URL);
 console.log('Platform:', Platform.OS);
@@ -14,12 +14,14 @@ class ApiService {
 
   private constructor() {
     console.log('Initializing ApiService');
-    // Initialize token from sessionStorage for web
+
+    // Load token from sessionStorage if running on web
     if (Platform.OS === 'web') {
       this.token = sessionStorage.getItem('token');
       console.log('Web environment detected, token from sessionStorage:', this.token);
     }
 
+    // ✅ Set baseURL without double `/api`
     this.axiosInstance = axios.create({
       baseURL: API_BASE_URL,
       headers: {
@@ -28,7 +30,7 @@ class ApiService {
       withCredentials: true,
     });
 
-    // Add request interceptor
+    // ✅ Interceptor to attach token
     this.axiosInstance.interceptors.request.use(
       (config) => {
         if (this.token) {
@@ -43,7 +45,7 @@ class ApiService {
       }
     );
 
-    // Add response interceptor
+    // ✅ Interceptor for response logs
     this.axiosInstance.interceptors.response.use(
       (response) => {
         console.log('Response:', response);
@@ -56,6 +58,7 @@ class ApiService {
     );
   }
 
+  // Singleton
   static getInstance(): ApiService {
     if (!ApiService.instance) {
       ApiService.instance = new ApiService();
@@ -63,6 +66,7 @@ class ApiService {
     return ApiService.instance;
   }
 
+  // ✅ To update token after login
   setToken(token: string) {
     console.log('Setting token:', token);
     this.token = token;
@@ -71,6 +75,7 @@ class ApiService {
     }
   }
 
+  // GET
   async get<T>(endpoint: string): Promise<T> {
     console.log(`Making GET request to ${endpoint}`);
     try {
@@ -82,9 +87,9 @@ class ApiService {
     }
   }
 
+  // POST
   async post<T>(endpoint: string, data: any): Promise<T> {
     console.log(`Making POST request to ${endpoint}`);
-    console.log('Request data:', data);
     try {
       const response = await this.axiosInstance.post<T>(endpoint, data);
       return response.data;
@@ -94,6 +99,7 @@ class ApiService {
     }
   }
 
+  // PUT
   async put<T>(endpoint: string, data: any): Promise<T> {
     console.log(`Making PUT request to ${endpoint}`);
     try {
@@ -105,6 +111,7 @@ class ApiService {
     }
   }
 
+  // DELETE
   async delete<T>(endpoint: string): Promise<T> {
     console.log(`Making DELETE request to ${endpoint}`);
     try {
@@ -117,4 +124,5 @@ class ApiService {
   }
 }
 
-export const apiService = ApiService.getInstance(); 
+// Export the singleton
+export const apiService = ApiService.getInstance();

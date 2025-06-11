@@ -64,7 +64,7 @@ export default function CreateScreen() {
   useEffect(() => {
     const fetchCurrentUser = async () => {
       try {
-        const response = await apiService.get('/auth/me');
+        const response = await apiService.get('/api/auth/me');
         setCurrentUser(response.profile);
       } catch (error) {
         console.error('Error fetching current user:', error);
@@ -530,7 +530,7 @@ export default function CreateScreen() {
       const imageUrl = await uploadImage(images[0]);
       
       // Create the post
-      const response = await apiService.post<{ id: number }>('/posts', {
+      const response = await apiService.post<{ id: number }>('/api/posts', {
         content: caption,
         imageUrl: imageUrl,
         isStory: false

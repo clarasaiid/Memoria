@@ -18,13 +18,13 @@ export default function FriendRequestButton({ targetUserId, currentUser }: Frien
   const checkFriendshipStatus = async () => {
     try {
       setStatus('loading');
-      const response = await apiService.get(`/users/${targetUserId}/relationship`);
+      const response: any = await apiService.get(`/api/users/${targetUserId}/relationship`);
       if (response.isFriend) {
         setStatus('friends');
         return;
       }
-
-      const requests = await apiService.get('/api/friend-requests');
+      if (!currentUser) return setStatus('none');
+      const requests: any[] = await apiService.get(`/api/friendships/incoming`);
       const outgoing = requests.find((req: any) =>
         (req.userId || req.UserId) === currentUser.id &&
         (req.friendId || req.FriendId) === targetUserId &&
@@ -35,7 +35,6 @@ export default function FriendRequestButton({ targetUserId, currentUser }: Frien
         (req.friendId || req.FriendId) === currentUser.id &&
         !(req.accepted || req.Accepted)
       );
-
       if (outgoing) setStatus('pending');
       else if (incoming) setStatus('incoming');
       else setStatus('none');
@@ -58,13 +57,13 @@ export default function FriendRequestButton({ targetUserId, currentUser }: Frien
   const sendFriendRequest = async () => {
     try {
       setLoading(true);
-      const res = await apiService.post('/api/friend-requests', {
+      const res = await apiService.post('/api/friendships', {
         UserId: currentUser.id,
         FriendId: targetUserId,
         Accepted: false
       });
 
-      if (res && res.id) {
+      if (res && (res as any).id) {
         setStatus('pending');
       } else {
         setTimeout(() => checkFriendshipStatus(), 2000);
@@ -79,15 +78,14 @@ export default function FriendRequestButton({ targetUserId, currentUser }: Frien
   const revokeFriendRequest = async () => {
     try {
       setLoading(true);
-      const requests = await apiService.get('/api/friend-requests');
+      const requests: any[] = await apiService.get(`/api/friendships/incoming`);
       const outgoing = requests.find((req: any) =>
         (req.userId || req.UserId) === currentUser.id &&
         (req.friendId || req.FriendId) === targetUserId &&
         !(req.accepted || req.Accepted)
       );
-
-      if (outgoing) {
-        await apiService.delete(`/api/friend-requests/${outgoing.id}/revoke`);
+      if (outgoing && typeof outgoing === 'object' && 'id' in outgoing) {
+        await apiService.delete(`/api/friendships/${outgoing.id}/revoke`);
         setStatus('none');
       }
     } catch (error) {
@@ -100,14 +98,14 @@ export default function FriendRequestButton({ targetUserId, currentUser }: Frien
   const handleIncomingRequest = async (accept: boolean) => {
     try {
       setLoading(true);
-      const requests = await apiService.get('/api/friend-requests');
+      const requests: any[] = await apiService.get(`/api/friendships/incoming`);
       const request = requests.find((req: any) =>
         (req.userId || req.UserId) === targetUserId &&
         (req.friendId || req.FriendId) === currentUser.id &&
         !(req.accepted || req.Accepted)
       );
       if (request) {
-        await apiService.put(`/api/friend-requests/${request.id}`, { accept });
+        await apiService.put(`/api/friendships/${request.id}`, { accept });
         setStatus(accept ? 'friends' : 'none');
       }
     } catch (error) {
