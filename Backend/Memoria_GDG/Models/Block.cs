@@ -1,6 +1,6 @@
 using System;
 
-namespace Memoria_GDG
+namespace Memoria_GDG.Models
 {
     public class Block
     {

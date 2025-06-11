@@ -9,6 +9,7 @@ using Memoria_GDG;
 using Memoria_GDG.Services;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Authorization;
+using Memoria_GDG.Models;
 
 namespace Memoria_GDG.Controllers
 {

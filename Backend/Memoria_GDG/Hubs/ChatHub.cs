@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
 using Memoria_GDG;
+using Memoria_GDG.Models;
 
 namespace Memoria_GDG.Hubs
 {

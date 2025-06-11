@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Image, TextInput,
 import { ArrowLeft, Camera, Upload, Clock, Users, Lock, Globe, Scissors, SlidersHorizontal, Trash2, Check, Crop, RefreshCw, Edit3, Type } from 'lucide-react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import DateTimePicker from '@/components/DateTimePicker';
+import CustomDateTimePicker from '../../components/DateTimePicker';
 import { router } from 'expo-router';
 import Tooltip from '@/components/Tooltip';
 import * as ImagePicker from 'expo-image-picker';
@@ -41,7 +42,7 @@ function unflipImage(imageSrc: string, callback: (unflipped: string) => void) {
 }
 
 export default function CreateScreen() {
-  const [isTimeCapsule, setIsTimeCapsule] = useState(true);
+  const [isTimeCapsule, setIsTimeCapsule] = useState(false);
   const [isPrivate, setIsPrivate] = useState(false);
   const [selectedDate, setSelectedDate] = useState(new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)); // One week from now
   const [mediaType, setMediaType] = useState('photo');
@@ -517,27 +518,38 @@ export default function CreateScreen() {
   };
 
   const handlePost = async () => {
-    if (images.length === 0) {
-      Alert.alert('Error', 'Please add at least one image');
-      return;
-    }
-
     if (isSubmitting) return;
     setIsSubmitting(true);
 
     try {
-      // Upload the first image
-      const imageUrl = await uploadImage(images[0]);
-      
-      // Create the post
-      const response = await apiService.post<{ id: number }>('/api/posts', {
-        content: caption,
-        imageUrl: imageUrl,
-        isStory: false
-      });
-
-      if (response) {
-        // Navigate back to the feed
+      let imageUrl = undefined;
+      if (images.length > 0) {
+        imageUrl = await uploadImage(images[0]);
+      }
+      if (isTimeCapsule) {
+        // Create a time capsule
+        const payload = {
+          Title: caption || 'Untitled Capsule',
+          Content: caption,
+          OpenAt: selectedDate.toISOString(),
+        };
+        let query = '';
+        if (isPrivate && taggedFriends && taggedFriends.length > 0) {
+          const ids = taggedFriends.map(f => f.id);
+          query = '?' + ids.map(id => `viewerIds=${id}`).join('&');
+        }
+        await apiService.post(`/api/timecapsule${query}`, payload);
+        router.replace('/messages');
+      } else {
+        // Create a regular post
+        const payload = {
+          content: caption,
+          isStory: false
+        };
+        if (imageUrl && typeof imageUrl === 'string' && imageUrl.trim() !== '') {
+          payload.imageUrl = imageUrl;
+        }
+        await apiService.post('/api/posts', payload);
         router.replace('/(tabs)');
       }
     } catch (error) {
@@ -643,10 +655,10 @@ export default function CreateScreen() {
                   <Clock size={20} color={colors.textSecondary} />
                   <Text style={styles.timeLabel}>Open date</Text>
                 </View>
-                <DateTimePicker 
+                <CustomDateTimePicker
                   value={selectedDate}
                   onChange={setSelectedDate}
-                  minimumDate={new Date(Date.now() + 24 * 60 * 60 * 1000)} // At least one day in future
+                  minimumDate={new Date(new Date().setHours(0,0,0,0))}
                 />
               </View>
               

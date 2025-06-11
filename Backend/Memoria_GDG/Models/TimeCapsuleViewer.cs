@@ -1,4 +1,7 @@
-namespace Memoria_GDG
+using System;
+using Memoria_GDG.Models;
+
+namespace Memoria_GDG.Models
 {
     public class TimeCapsuleViewer
     {

@@ -7,6 +7,7 @@ using Microsoft.AspNetCore.Authorization;
 using System.Security.Claims;
 using System;
 using System.Linq;
+using Memoria_GDG.Models;
 
 namespace Memoria_GDG.Controllers
 {

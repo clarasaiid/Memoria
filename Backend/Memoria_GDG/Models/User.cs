@@ -1,8 +1,8 @@
-﻿using Memoria_GDG;
-using Microsoft.AspNetCore.Identity;
+﻿using Microsoft.AspNetCore.Identity;
 using System.Collections.Generic;
+using Memoria_GDG.Models;
 
-namespace Memoria_GDG
+namespace Memoria_GDG.Models
 {
     public class User : IdentityUser<int>
     {

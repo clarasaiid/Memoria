@@ -443,8 +443,8 @@ export default function HomePage() {
             router.push({ pathname: '/post/[id]', params: { id: post.id.toString() } });
           }}
         >
-          <Image source={{ uri: post.imageUrl }} style={styles.postImage} />
-          </TouchableOpacity>
+          <Image source={{ uri: post.imageUrl ? (post.imageUrl.startsWith('http') ? post.imageUrl : `http://localhost:7000${post.imageUrl}`) : undefined }} style={styles.postImage} />
+        </TouchableOpacity>
 
         <View style={styles.postActions}>
           <TouchableOpacity 

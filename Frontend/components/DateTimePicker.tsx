@@ -71,6 +71,50 @@ export default function CustomDateTimePicker({ value, onChange, minimumDate }: C
     }
   };
   
+  // Web: use native HTML inputs
+  if (Platform.OS === 'web') {
+    const handleDateChangeWeb = (e: React.ChangeEvent<HTMLInputElement>) => {
+      const dateStr = e.target.value;
+      if (!dateStr) return;
+      const [year, month, day] = dateStr.split('-').map(Number);
+      const newDate = new Date(tempDate);
+      newDate.setFullYear(year);
+      newDate.setMonth(month - 1);
+      newDate.setDate(day);
+      setTempDate(newDate);
+      onChange(newDate);
+    };
+    const handleTimeChangeWeb = (e: React.ChangeEvent<HTMLInputElement>) => {
+      const timeStr = e.target.value;
+      if (!timeStr) return;
+      const [hour, minute] = timeStr.split(':').map(Number);
+      const newDate = new Date(tempDate);
+      newDate.setHours(hour);
+      newDate.setMinutes(minute);
+      setTempDate(newDate);
+      onChange(newDate);
+    };
+    const dateValue = `${tempDate.getFullYear()}-${String(tempDate.getMonth() + 1).padStart(2, '0')}-${String(tempDate.getDate()).padStart(2, '0')}`;
+    const timeValue = `${String(tempDate.getHours()).padStart(2, '0')}:${String(tempDate.getMinutes()).padStart(2, '0')}`;
+    return (
+      <View style={{ flexDirection: 'row', gap: 8 }}>
+        <input
+          type="date"
+          value={dateValue}
+          min={minimumDate ? minimumDate.toISOString().split('T')[0] : undefined}
+          onChange={handleDateChangeWeb}
+          style={{ padding: 8, borderRadius: 8, border: '1px solid #ddd', fontSize: 14 }}
+        />
+        <input
+          type="time"
+          value={timeValue}
+          onChange={handleTimeChangeWeb}
+          style={{ padding: 8, borderRadius: 8, border: '1px solid #ddd', fontSize: 14 }}
+        />
+      </View>
+    );
+  }
+  
   return (
     <View style={styles.container}>
       <View style={styles.dateTimeContainer}>

@@ -6,6 +6,7 @@ using System.Text;
 using Memoria_GDG;
 using Memoria_GDG.Services;
 using Memoria_GDG.Hubs;
+using Memoria_GDG.Models;
 
 var builder = WebApplication.CreateBuilder(args);
 

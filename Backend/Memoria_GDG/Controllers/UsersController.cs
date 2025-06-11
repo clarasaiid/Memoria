@@ -9,6 +9,7 @@ using Memoria_GDG.Dtos;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.SignalR;
 using Memoria_GDG.Hubs;
+using Memoria_GDG.Models;
 
 namespace Memoria_GDG.Controllers
 {
