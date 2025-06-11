@@ -9,7 +9,7 @@ using System.Security.Claims;
 namespace Memoria_GDG.Controllers
 {
     [ApiController]
-    [Route("comments")]
+    [Route("api/[controller]")]
     public class CommentsController : ControllerBase
     {
         private readonly AppDbContext _context;

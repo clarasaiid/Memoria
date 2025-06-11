@@ -1,24 +1,37 @@
 import { useLocalSearchParams, router } from 'expo-router';
-import { View, Text, StyleSheet, Image, TouchableOpacity, ScrollView, TextInput, Platform, useWindowDimensions } from 'react-native';
-import { useMockProfileData } from '@/hooks/useMockData';
-import { ArrowLeft, MoreHorizontal } from 'lucide-react-native';
-import { useState } from 'react';
-
-// Mock comments
-const mockComments = [
-  { id: 1, username: 'emma_l', text: 'Beautiful view! 😍' },
-  { id: 2, username: 'alex_j', text: 'Where is this?' },
-  { id: 3, username: 'david_w', text: 'Amazing shot!' },
-];
+import { View, Text, StyleSheet, Image, TouchableOpacity, ScrollView, TextInput, Platform, useWindowDimensions, ActivityIndicator } from 'react-native';
+import { useEffect, useState } from 'react';
+import { ArrowLeft } from 'lucide-react-native';
+import { apiService } from '../services/api';
 
 export default function PostDetails() {
   const { id } = useLocalSearchParams();
-  const { posts, profile } = useMockProfileData();
-  const post = posts.find((p) => p.id.toString() === id);
   const { width } = useWindowDimensions();
-  const isLarge = width > 700;
+  const [post, setPost] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
   const [comment, setComment] = useState('');
-  const [comments, setComments] = useState(mockComments);
+  const [comments, setComments] = useState<any[]>([]);
+  const isLarge = width > 700;
+
+  useEffect(() => {
+    const fetchPost = async () => {
+      setLoading(true);
+      try {
+        const res = await apiService.get(`/posts/${id}`);
+        setPost(res);
+        setComments(res.comments || []);
+      } catch (e) {
+        setPost(null);
+      } finally {
+        setLoading(false);
+      }
+    };
+    if (id) fetchPost();
+  }, [id]);
+
+  if (loading) {
+    return <View style={styles.centered}><ActivityIndicator size="large" /></View>;
+  }
 
   if (!post) {
     return (
@@ -28,7 +41,7 @@ export default function PostDetails() {
 
   const handleAddComment = () => {
     if (comment.trim()) {
-      setComments([{ id: Date.now(), username: profile.username, text: comment }, ...comments]);
+      setComments([{ id: Date.now(), username: post.user?.userName || 'You', text: comment }, ...comments]);
       setComment('');
     }
   };
@@ -38,7 +51,9 @@ export default function PostDetails() {
       <View style={[styles.card, isLarge && styles.cardLarge]}>
         {/* Image */}
         <View style={[styles.imageCol, isLarge && styles.imageColLarge]}>
-          <Image source={{ uri: post.imageUrl }} style={[styles.postImage, isLarge && styles.postImageLarge]} />
+          {post.imageUrl && (
+            <Image source={{ uri: post.imageUrl.startsWith('http') ? post.imageUrl : `http://localhost:7000${post.imageUrl}` }} style={[styles.postImage, isLarge && styles.postImageLarge]} />
+          )}
         </View>
         {/* Info/Comments */}
         <View style={[styles.infoCol, isLarge && styles.infoColLarge]}>
@@ -48,17 +63,16 @@ export default function PostDetails() {
               <TouchableOpacity onPress={() => router.push('/(tabs)/profile')} style={styles.backBtn}>
                 <ArrowLeft size={24} color="#222" />
               </TouchableOpacity>
-              <Image source={{ uri: profile.avatarUrl }} style={styles.avatar} />
-              <Text style={styles.username}>{profile.username}</Text>
-              <TouchableOpacity style={styles.menuBtn}><MoreHorizontal size={22} color="#222" /></TouchableOpacity>
+              <Image source={{ uri: post.user?.profilePictureUrl || `https://ui-avatars.com/api/?name=${post.user?.userName}` }} style={styles.avatar} />
+              <Text style={styles.username}>{post.user?.userName}</Text>
             </View>
             {/* Likes/Caption */}
             <View style={styles.likesRow}>
-              <Text style={styles.likesText}>370,608 likes</Text>
+              <Text style={styles.likesText}>{post.reactions?.length || 0} likes</Text>
             </View>
             <View style={styles.captionRow}>
-              <Text style={styles.captionUsername}>{profile.username}</Text>
-              <Text style={styles.captionText}> This is a placeholder caption for the post.</Text>
+              <Text style={styles.captionUsername}>{post.user?.userName}</Text>
+              <Text style={styles.captionText}> {post.content}</Text>
             </View>
             {/* Comments */}
             <View style={styles.commentsListWrap}>
@@ -108,7 +122,6 @@ const styles = StyleSheet.create({
   backBtn: { marginRight: 10 },
   avatar: { width: 40, height: 40, borderRadius: 20, marginRight: 10 },
   username: { fontSize: 16, color: '#222', fontWeight: 'bold', marginRight: 8 },
-  menuBtn: { marginLeft: 'auto', padding: 6 },
   likesRow: { marginBottom: 8 },
   likesText: { fontSize: 15, color: '#222', fontWeight: 'bold' },
   captionRow: { flexDirection: 'row', marginBottom: 10, flexWrap: 'wrap' },

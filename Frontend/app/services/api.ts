@@ -2,7 +2,7 @@ import { Platform } from 'react-native';
 import axios, { AxiosError, AxiosInstance } from 'axios';
 
 // Force HTTP for all environments during local development
-const API_BASE_URL = 'http://localhost:7000';
+const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:7000/api';
 
 console.log('API_BASE_URL:', API_BASE_URL);
 console.log('Platform:', Platform.OS);

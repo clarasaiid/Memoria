@@ -13,4 +13,11 @@ namespace Memoria_GDG
         public User Follower { get; set; }
         public User Following { get; set; }
     }
+
+    public enum FollowStatus
+    {
+        Pending,
+        Accepted,
+        Rejected
+    }
 } 

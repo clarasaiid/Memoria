@@ -11,7 +11,7 @@ using System;
 namespace Memoria_GDG.Controllers
 {
     [ApiController]
-    [Route("timecapsules")]
+    [Route("api/[controller]")]
     public class TimeCapsuleController : ControllerBase
     {
         private readonly AppDbContext _context;

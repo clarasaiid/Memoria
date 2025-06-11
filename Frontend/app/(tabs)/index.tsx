@@ -12,11 +12,18 @@ import {
   Pressable,
   TouchableWithoutFeedback,
   findNodeHandle,
+  Platform,
+  ActivityIndicator,
+  Alert,
+  Modal,
 } from 'react-native';
 import { useRouter } from 'expo-router';
-import { User as UserIcon, Search as SearchIcon, Calendar, Plus, Bell, Heart, MessageCircle, X, Users } from 'lucide-react-native';
+import { User as UserIcon, Search as SearchIcon, Calendar, Plus, Bell, Heart, MessageCircle, X, Users, MoreHorizontal, Trash2, Archive } from 'lucide-react-native';
 import { useTheme } from '../../components/ThemeProvider';
 import { searchService, SearchResult, UserResult, HashtagResult, GroupResult } from '../services/searchService';
+import { FeedRecommendationService } from '../services/feedRecommendationService';
+import { FeedPost, FeedMetadata } from '../types/feed';
+import { apiService } from '../services/api';
 
 const AVATAR_PLACEHOLDER = 'https://ui-avatars.com/api/?name=User&background=F3E8FF&color=A78BFA';
 const CAPSULE_PLACEHOLDER = 'https://images.unsplash.com/photo-1506744038136-46273834b3fb?auto=format&fit=crop&w=400&q=80';
@@ -26,17 +33,6 @@ interface Capsule {
   title: string;
   openDate: string;
   coverUrl: string;
-}
-
-interface FeedPost {
-  id: number;
-  username: string;
-  avatarUrl: string;
-  timeAgo: string;
-  imageUrl: string | null;
-  content: string;
-  likeCount?: number;
-  commentCount?: number;
 }
 
 interface Person {
@@ -49,21 +45,6 @@ const mockPublicCapsules = [
   { id: 1, title: 'Spring Break 2024', openDate: new Date(Date.now() + 86400000 * 7).toISOString(), coverUrl: CAPSULE_PLACEHOLDER },
   { id: 2, title: 'High School Memories', openDate: new Date(Date.now() + 86400000 * 30).toISOString(), coverUrl: CAPSULE_PLACEHOLDER },
   { id: 3, title: 'Family Reunion', openDate: new Date(Date.now() + 86400000 * 14).toISOString(), coverUrl: CAPSULE_PLACEHOLDER },
-];
-
-const mockFeed = [
-  { id: 101, username: 'alice', avatarUrl: AVATAR_PLACEHOLDER, timeAgo: '2h ago', imageUrl: CAPSULE_PLACEHOLDER, content: 'Had an amazing time at the beach! 🌊', likeCount: 10, commentCount: 5 },
-  { id: 102, username: 'bob', avatarUrl: AVATAR_PLACEHOLDER, timeAgo: '5h ago', imageUrl: null, content: 'Just opened my time capsule from 2019. So many memories!', likeCount: 5, commentCount: 2 },
-];
-
-const mockFollowingFeed = [
-  { id: 201, username: 'carol', avatarUrl: AVATAR_PLACEHOLDER, timeAgo: '1d ago', imageUrl: CAPSULE_PLACEHOLDER, content: 'Throwback to our graduation day! 🎓', likeCount: 15, commentCount: 8 },
-];
-
-const mockPeople = [
-  { id: 301, username: 'dave', avatarUrl: AVATAR_PLACEHOLDER },
-  { id: 302, username: 'eve', avatarUrl: AVATAR_PLACEHOLDER },
-  { id: 303, username: 'frank', avatarUrl: AVATAR_PLACEHOLDER },
 ];
 
 const mockComments = {
@@ -103,12 +84,52 @@ export default function HomePage() {
   const [dropdownPos, setDropdownPos] = useState({ top: 0, left: 0, width: 300 });
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
   const [searchBarFocused, setSearchBarFocused] = useState(false);
+  const [recommendedFeed, setRecommendedFeed] = useState<FeedPost[]>([]);
+  const recommendationService = FeedRecommendationService.getInstance();
+  const [menuVisible, setMenuVisible] = useState(false);
+  const [selectedPostId, setSelectedPostId] = useState<number | null>(null);
 
   useEffect(() => {
     setPublicCapsules(mockPublicCapsules);
-    setFeed(mockFeed);
-    setFollowingFeed(mockFollowingFeed);
-    setPeople(mockPeople);
+    setFeed([]);
+    setFollowingFeed([]);
+    setPeople([]);
+
+    recommendationService.updateUserPreferences({
+      interests: [],
+      following: [],
+      likedPosts: [],
+      commentedPosts: [],
+    });
+
+    const recommended = recommendationService.getRecommendedFeed([]);
+    setRecommendedFeed(recommended);
+  }, []);
+
+  useEffect(() => {
+    const fetchPosts = async () => {
+      try {
+        const response = await apiService.get('/posts');
+        const posts = response
+          .filter((post: any) => !post.isArchived)
+          .map((post: any) => ({
+            id: post.id,
+            content: post.content,
+            imageUrl: post.imageUrl.startsWith('http') ? post.imageUrl : `http://localhost:7000${post.imageUrl}`,
+            username: post.user?.userName || post.user?.username || 'Unknown User',
+            avatarUrl: post.user?.profilePictureUrl || `https://ui-avatars.com/api/?name=${post.user?.userName || post.user?.username || 'Unknown'}`,
+            timeAgo: 'Just now',
+            likeCount: post.reactions?.length || 0,
+            commentCount: post.comments?.length || 0
+          }));
+        setFeed(posts);
+        setFollowingFeed(posts); // For now, show same posts in both feeds
+      } catch (error) {
+        console.error('Error fetching posts:', error);
+      }
+    };
+
+    fetchPosts();
   }, []);
 
   useEffect(() => {
@@ -143,7 +164,6 @@ export default function HomePage() {
     }
   }, [showSearchBar, searchBarRef.current, search]);
 
-  // Web: close search bar if click is outside search bar and dropdown
   useEffect(() => {
     if (!showSearchBar) return;
     function handleClick(event) {
@@ -271,7 +291,14 @@ export default function HomePage() {
       alignItems: 'center',
     },
     postCard: { backgroundColor: colors.card, borderRadius: 12, padding: 16, marginBottom: 16, shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 6, elevation: 3, borderWidth: 1, borderColor: colors.border },
-    postHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 10 },
+    postHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      padding: 12,
+      backgroundColor: colors.cardAlt,
+      borderTopLeftRadius: 12,
+      borderTopRightRadius: 12,
+    },
     avatar: { width: 36, height: 36, borderRadius: 18, marginRight: 12 },
     avatarLarge: { width: 42, height: 42, borderRadius: 21, marginRight: 10 },
     username: { fontSize: 15, fontWeight: '600', color: colors.text },
@@ -402,6 +429,38 @@ export default function HomePage() {
       fontSize: 15,
       color: colors.textSecondary,
     },
+    menuButton: {
+      padding: 8,
+      marginLeft: 'auto',
+      zIndex: 1,
+    },
+    modalOverlay: {
+      flex: 1,
+      backgroundColor: 'rgba(0, 0, 0, 0.5)',
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    menuContent: {
+      width: 200,
+      borderRadius: 12,
+      padding: 8,
+      elevation: 5,
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.25,
+      shadowRadius: 3.84,
+    },
+    menuItem: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      padding: 12,
+      borderRadius: 8,
+    },
+    menuItemText: {
+      marginLeft: 12,
+      fontSize: 16,
+      fontWeight: '500',
+    },
   });
 
   const renderSearchResults = () => {
@@ -512,282 +571,392 @@ export default function HomePage() {
     );
   };
 
-  return (
-    <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }] }>
-      <View style={styles.pageWrapper}>
-        <View style={[styles.grid, isWide && styles.gridWide]}>
-          {isWide && (
-            <View style={styles.sidebar}>
-              <Text style={styles.logoText}>MEMORIA</Text>
-              <View style={styles.sidebarContent}>
-                <View style={[styles.sidebarBox, { backgroundColor: colors.cardAlt, borderColor: colors.border }]}>
-                  <TouchableOpacity onPress={() => router.navigate('/time-capsules')}>
-                    <Text style={[styles.sectionTitle, {color: colors.primary }]}>Time Capsules</Text>
-                  </TouchableOpacity>
-                  <ScrollView 
-                    horizontal 
-                    showsHorizontalScrollIndicator={false} 
-                    style={styles.horizontalScroll}
-                    contentContainerStyle={styles.horizontalScrollContent}
-                  >
-                    {publicCapsules.map(c => (
-                      <TouchableOpacity key={c.id} style={styles.capsuleCard} onPress={() => {
-                        if (new Date(c.openDate) <= new Date()) {
-                          router.push({ pathname: '/(capsule)/view', params: { id: c.id } });
-                        } else {
-                          setLockedCapsuleId(c.id);
-                          setTimeout(() => setLockedCapsuleId(null), 2500);
-                        }
-                      }}>
-                        <Image source={{ uri: c.coverUrl }} style={styles.capsuleImage} />
-                        <View>
-                          <Text style={styles.capsuleTitle}>{c.title}</Text>
-                          <Text style={styles.capsuleDate}>Opens: {new Date(c.openDate).toLocaleDateString()}</Text>
-                        </View>
-                        {lockedCapsuleId === c.id && (
-                          <Text style={{ color: 'red', fontSize: 12, marginTop: 4 }}>This time capsule is still locked</Text>
-                        )}
-                      </TouchableOpacity>
-                    ))}
-                  </ScrollView>
-                </View>
+  const extractHashtags = (content: string): string[] => {
+    const hashtagRegex = /#[\w-]+/g;
+    return content.match(hashtagRegex) || [];
+  };
 
-                <View style={[styles.sidebarBox, { backgroundColor: colors.cardAlt, borderColor: colors.border }]}>
-                  <TouchableOpacity onPress={() => router.navigate('/people-suggestions')}>
-                    <Text style={[styles.sectionTitle, {color: colors.primary }]}>People You May Know</Text>
-                  </TouchableOpacity>
-                  <ScrollView 
-                    horizontal 
-                    showsHorizontalScrollIndicator={false} 
-                    style={styles.horizontalScroll}
-                    contentContainerStyle={styles.horizontalScrollContent}
-                  >
-                    {people.map(p => (
-                      <View key={p.id} style={[styles.userCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-                        <Image source={{ uri: p.avatarUrl }} style={styles.avatarLarge} />
-                        <Text style={styles.username}>{p.username}</Text>
-                        <TouchableOpacity style={[styles.addFriendBtn]}>
-                          <Text style={styles.addFriendBtnText}>Add Friend</Text>
+  const determineCategory = (content: string): string => {
+    const categories = {
+      travel: ['travel', 'trip', 'vacation', 'beach', 'mountain'],
+      photography: ['photo', 'picture', 'camera', 'shot'],
+      memories: ['memory', 'remember', 'throwback', 'nostalgia'],
+    };
+
+    const contentLower = content.toLowerCase();
+    for (const [category, keywords] of Object.entries(categories)) {
+      if (keywords.some(keyword => contentLower.includes(keyword))) {
+        return category;
+      }
+    }
+    return 'general';
+  };
+
+  const calculateEngagement = (post: FeedPost): number => {
+    const likes = post.likeCount || 0;
+    const comments = post.commentCount || 0;
+    return (likes + comments * 2) / 100;
+  };
+
+  const calculateRecency = (timeAgo: string): number => {
+    const hours = parseInt(timeAgo);
+    if (isNaN(hours)) return 0.5;
+    return Math.max(0, 1 - hours / 24);
+  };
+
+  const renderFeed = () => {
+    const currentFeed = feedTab === 'for-you' ? recommendedFeed : followingFeed;
+    return currentFeed.map(post => (
+      <View key={post.id} style={styles.postCard}>
+        <View style={styles.postHeader}>
+          <Image source={{ uri: post.avatarUrl }} style={styles.avatar} />
+          <View style={{ flex: 1 }}>
+            <Text style={styles.username}>{post.username}</Text>
+            <Text style={styles.time}>{post.timeAgo}</Text>
+          </View>
+          <TouchableOpacity 
+            style={styles.menuButton} 
+            onPress={() => handleMenuPress(post.id)}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          >
+            <MoreHorizontal size={20} color={colors.text} />
+          </TouchableOpacity>
+        </View>
+        {post.imageUrl && <Image source={{ uri: post.imageUrl }} style={styles.postImage} />}
+        <Text style={styles.postText}>{post.content}</Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 8 }}>
+          <TouchableOpacity onPress={() => {
+            setLikedPosts(prev => ({ ...prev, [post.id]: !prev[post.id] }));
+            setLikeCounts(prev => {
+              const current = prev[post.id] ?? post.likeCount ?? 0;
+              return { ...prev, [post.id]: likedPosts[post.id] ? current - 1 : current + 1 };
+            });
+          }} style={{ flexDirection: 'row', alignItems: 'center', marginRight: 16 }}>
+            <Heart size={20} color={likedPosts[post.id] ? '#EC4899' : colors.primary} fill={likedPosts[post.id] ? '#EC4899' : 'none'} style={{ marginRight: 6 }} />
+            <Text style={{ color: colors.text }}>{likeCounts[post.id] ?? post.likeCount ?? 0}</Text>
+          </TouchableOpacity>
+          <TouchableOpacity onPress={() => setExpandedComments(prev => ({ ...prev, [post.id]: !prev[post.id] }))} style={{ flexDirection: 'row', alignItems: 'center' }}>
+            <MessageCircle size={20} color={colors.primary} style={{ marginRight: 6 }} />
+            <Text style={{ color: colors.text }}>{comments[post.id]?.length ?? post.commentCount ?? 0}</Text>
+          </TouchableOpacity>
+        </View>
+        {expandedComments[post.id] && (
+          <View style={{ marginTop: 10, backgroundColor: colors.cardAlt, borderRadius: 10, padding: 12 }}>
+            {comments[post.id]?.map(c => (
+              <Text key={c.id} style={{ color: colors.text, marginBottom: 6 }}><Text style={{ fontWeight: 'bold' }}>{c.username}:</Text> {c.text}</Text>
+            ))}
+            <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 8 }}>
+              <TextInput
+                style={{ flex: 1, backgroundColor: colors.card, borderRadius: 8, padding: 8, color: colors.text, borderWidth: 1, borderColor: colors.border }}
+                placeholder="Add a comment..."
+                placeholderTextColor={colors.textSecondary}
+                value={commentInputs[post.id] ?? ''}
+                onChangeText={text => setCommentInputs(prev => ({ ...prev, [post.id]: text }))}
+              />
+              <TouchableOpacity
+                onPress={() => {
+                  if ((commentInputs[post.id] ?? '').trim()) {
+                    setComments(prev => ({
+                      ...prev,
+                      [post.id]: [
+                        ...(prev[post.id] ?? []),
+                        { id: Date.now(), username: 'you', text: commentInputs[post.id] }
+                      ]
+                    }));
+                    setCommentInputs(prev => ({ ...prev, [post.id]: '' }));
+                  }
+                }}
+                style={{ marginLeft: 8, backgroundColor: colors.primary, borderRadius: 8, paddingVertical: 8, paddingHorizontal: 14 }}
+              >
+                <Text style={{ color: colors.buttonText, fontWeight: 'bold' }}>Post</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        )}
+      </View>
+    ));
+  };
+
+  const handleMenuPress = (postId: number) => {
+    setSelectedPostId(postId);
+    setMenuVisible(true);
+  };
+
+  const handleArchivePost = async () => {
+    if (!selectedPostId) return;
+    try {
+      await apiService.put(`/posts/archive/${selectedPostId}`, {});
+      // Update all feeds
+      setFeed(prev => prev.filter(post => post.id !== selectedPostId));
+      setFollowingFeed(prev => prev.filter(post => post.id !== selectedPostId));
+      setRecommendedFeed(prev => prev.filter(post => post.id !== selectedPostId));
+      Alert.alert('Success', 'Post archived successfully');
+    } catch (error) {
+      console.error('Error archiving post:', error);
+      Alert.alert('Error', 'Failed to archive post');
+    } finally {
+      setMenuVisible(false);
+      setSelectedPostId(null);
+    }
+  };
+
+  const handleDeletePost = async () => {
+    if (!selectedPostId) return;
+    try {
+      await apiService.delete(`/posts/${selectedPostId}`);
+      // Update all feeds
+      setFeed(prev => prev.filter(post => post.id !== selectedPostId));
+      setFollowingFeed(prev => prev.filter(post => post.id !== selectedPostId));
+      setRecommendedFeed(prev => prev.filter(post => post.id !== selectedPostId));
+      Alert.alert('Success', 'Post deleted successfully');
+    } catch (error) {
+      console.error('Error deleting post:', error);
+      Alert.alert('Error', 'Failed to delete post');
+    } finally {
+      setMenuVisible(false);
+      setSelectedPostId(null);
+    }
+  };
+
+  return (
+    <>
+      <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }] }>
+        <View style={styles.pageWrapper}>
+          <View style={[styles.grid, isWide && styles.gridWide]}>
+            {isWide && (
+              <View style={styles.sidebar}>
+                <Text style={styles.logoText}>MEMORIA</Text>
+                <View style={styles.sidebarContent}>
+                  <View style={[styles.sidebarBox, { backgroundColor: colors.cardAlt, borderColor: colors.border }]}>
+                    <TouchableOpacity onPress={() => router.navigate('/time-capsules')}>
+                      <Text style={[styles.sectionTitle, {color: colors.primary }]}>Time Capsules</Text>
+                    </TouchableOpacity>
+                    <ScrollView 
+                      horizontal 
+                      showsHorizontalScrollIndicator={false} 
+                      style={styles.horizontalScroll}
+                      contentContainerStyle={styles.horizontalScrollContent}
+                    >
+                      {publicCapsules.map(c => (
+                        <TouchableOpacity key={c.id} style={styles.capsuleCard} onPress={() => {
+                          if (new Date(c.openDate) <= new Date()) {
+                            router.push({ pathname: '/(capsule)/view', params: { id: c.id } });
+                          } else {
+                            setLockedCapsuleId(c.id);
+                            setTimeout(() => setLockedCapsuleId(null), 2500);
+                          }
+                        }}>
+                          <Image source={{ uri: c.coverUrl }} style={styles.capsuleImage} />
+                          <View>
+                            <Text style={styles.capsuleTitle}>{c.title}</Text>
+                            <Text style={styles.capsuleDate}>Opens: {new Date(c.openDate).toLocaleDateString()}</Text>
+                          </View>
+                          {lockedCapsuleId === c.id && (
+                            <Text style={{ color: 'red', fontSize: 12, marginTop: 4 }}>This time capsule is still locked</Text>
+                          )}
+                        </TouchableOpacity>
+                      ))}
+                    </ScrollView>
+                  </View>
+
+                  <View style={[styles.sidebarBox, { backgroundColor: colors.cardAlt, borderColor: colors.border }]}>
+                    <TouchableOpacity onPress={() => router.navigate('/people-suggestions')}>
+                      <Text style={[styles.sectionTitle, {color: colors.primary }]}>People You May Know</Text>
+                    </TouchableOpacity>
+                    <ScrollView 
+                      horizontal 
+                      showsHorizontalScrollIndicator={false} 
+                      style={styles.horizontalScroll}
+                      contentContainerStyle={styles.horizontalScrollContent}
+                    >
+                      {people.map(p => (
+                        <View key={p.id} style={[styles.userCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                          <Image source={{ uri: p.avatarUrl }} style={styles.avatarLarge} />
+                          <Text style={styles.username}>{p.username}</Text>
+                          <TouchableOpacity style={[styles.addFriendBtn]}>
+                            <Text style={styles.addFriendBtnText}>Add Friend</Text>
+                          </TouchableOpacity>
+                        </View>
+                      ))}
+                    </ScrollView>
+                  </View>
+                </View>
+              </View>
+            )}
+
+            <View style={styles.feedBox}>
+              <View style={[styles.tabBar, { position: 'relative' }]}>
+                <View style={styles.tabItems}>
+                  {(['for-you', 'following'] as const).map(tab => (
+                    <TouchableOpacity
+                      key={tab}
+                      style={[styles.tabItem, feedTab === tab && styles.tabItemActive]}
+                      onPress={() => setFeedTab(tab)}
+                    >
+                      <Text style={feedTab === tab ? styles.tabTextActive : styles.tabText}>
+                        {tab === 'for-you' ? 'For You' : 'Following'}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+                <View style={{ position: 'absolute', right: 0, top: 0, height: '100%', flexDirection: 'row', alignItems: 'center', zIndex: 10 }}>
+                  <View ref={searchBarContainerRef} style={{ flexDirection: 'row', alignItems: 'center', position: 'relative' }}>
+                    {showSearchBar && (
+                      <View
+                        ref={searchBarRef}
+                        style={[
+                          styles.searchBar,
+                          {
+                            position: 'relative',
+                            width: 256,
+                            height: 40,
+                            minHeight: 40,
+                            maxHeight: 40,
+                            marginBottom: 0,
+                            backgroundColor: colors.card,
+                            borderTopLeftRadius: 12,
+                            borderBottomLeftRadius: 12,
+                            borderTopRightRadius: 0,
+                            borderBottomRightRadius: 0,
+                            shadowOpacity: 0,
+                            borderBottomWidth: 0,
+                            borderWidth: 1,
+                            borderColor: colors.border,
+                            transitionProperty: 'width',
+                            transitionDuration: '0.2s',
+                            transitionTimingFunction: 'ease',
+                            zIndex: 11,
+                            flexDirection: 'row',
+                            alignItems: 'center',
+                          },
+                        ]}
+                      >
+                        <TextInput
+                          style={[
+                            styles.searchInput,
+                            {
+                              height: 40,
+                              minHeight: 40,
+                              maxHeight: 40,
+                              paddingVertical: 0,
+                              lineHeight: 40,
+                              flex: 1,
+                            },
+                          ]}
+                          placeholder="Search Memoria..."
+                          placeholderTextColor={colors.textSecondary}
+                          value={search}
+                          onChangeText={setSearch}
+                          autoFocus
+                          onFocus={() => setSearchBarFocused(true)}
+                          onBlur={() => setSearchBarFocused(false)}
+                        />
+                        <TouchableOpacity onPress={() => {
+                          setShowSearchBar(false);
+                          setSearch('');
+                          setSearchResults(null);
+                        }}>
+                          <X size={22} color={colors.text} />
                         </TouchableOpacity>
                       </View>
-                    ))}
-                  </ScrollView>
-                </View>
-              </View>
-            </View>
-          )}
-
-          <View style={styles.feedBox}>
-            <View style={[styles.tabBar, { position: 'relative' }]}>
-              <View style={styles.tabItems}>
-                {(['for-you', 'following'] as const).map(tab => (
-                  <TouchableOpacity
-                    key={tab}
-                    style={[styles.tabItem, feedTab === tab && styles.tabItemActive]}
-                    onPress={() => setFeedTab(tab)}
-                  >
-                    <Text style={feedTab === tab ? styles.tabTextActive : styles.tabText}>
-                      {tab === 'for-you' ? 'For You' : 'Following'}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-              {/* Search bar and icons at far right */}
-              <View style={{ position: 'absolute', right: 0, top: 0, height: '100%', flexDirection: 'row', alignItems: 'center', zIndex: 10 }}>
-                {/* Animated search bar expansion */}
-                <View ref={searchBarContainerRef} style={{ flexDirection: 'row', alignItems: 'center', position: 'relative' }}>
-                  {showSearchBar && (
-                    <View
-                      ref={searchBarRef}
+                    )}
+                    <TouchableOpacity
+                      onPress={() => setShowSearchBar(true)}
                       style={[
-                        styles.searchBar,
+                        styles.notificationButton,
                         {
-                          position: 'relative',
-                          width: 256,
-                          height: 40,
-                          minHeight: 40,
-                          maxHeight: 40,
-                          marginBottom: 0,
+                          borderTopRightRadius: 12,
+                          borderBottomRightRadius: 12,
+                          borderTopLeftRadius: showSearchBar ? 0 : 12,
+                          borderBottomLeftRadius: showSearchBar ? 0 : 12,
                           backgroundColor: colors.card,
-                          borderTopLeftRadius: 12,
-                          borderBottomLeftRadius: 12,
-                          borderTopRightRadius: 0,
-                          borderBottomRightRadius: 0,
-                          shadowOpacity: 0,
-                          borderBottomWidth: 0,
-                          borderWidth: 1,
+                          zIndex: 12,
+                          marginLeft: showSearchBar ? 0 : 8,
+                          borderLeftWidth: showSearchBar ? 0 : 1,
                           borderColor: colors.border,
-                          transitionProperty: 'width',
-                          transitionDuration: '0.2s',
-                          transitionTimingFunction: 'ease',
-                          zIndex: 11,
-                          flexDirection: 'row',
+                          height: 40,
+                          width: 40,
+                          justifyContent: 'center',
                           alignItems: 'center',
                         },
                       ]}
                     >
-                      <TextInput
-                        style={[
-                          styles.searchInput,
-                          {
-                            height: 40,
-                            minHeight: 40,
-                            maxHeight: 40,
-                            paddingVertical: 0,
-                            lineHeight: 40,
-                            flex: 1,
-                          },
-                        ]}
-                        placeholder="Search Memoria..."
-                        placeholderTextColor={colors.textSecondary}
-                        value={search}
-                        onChangeText={setSearch}
-                        autoFocus
-                        onFocus={() => setSearchBarFocused(true)}
-                        onBlur={() => setSearchBarFocused(false)}
-                      />
-                      <TouchableOpacity onPress={() => {
-                        setShowSearchBar(false);
-                        setSearch('');
-                        setSearchResults(null);
-                      }}>
-                        <X size={22} color={colors.text} />
-                      </TouchableOpacity>
-                    </View>
-                  )}
-                  <TouchableOpacity
-                    onPress={() => setShowSearchBar(true)}
-                    style={[
-                      styles.notificationButton,
-                      {
-                        borderTopRightRadius: 12,
-                        borderBottomRightRadius: 12,
-                        borderTopLeftRadius: showSearchBar ? 0 : 12,
-                        borderBottomLeftRadius: showSearchBar ? 0 : 12,
-                        backgroundColor: colors.card,
-                        zIndex: 12,
-                        marginLeft: showSearchBar ? 0 : 8,
-                        borderLeftWidth: showSearchBar ? 0 : 1,
-                        borderColor: colors.border,
-                        height: 40,
-                        width: 40,
-                        justifyContent: 'center',
-                        alignItems: 'center',
-                      },
-                    ]}
-                  >
-                    <SearchIcon size={20} color={colors.text} />
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={[styles.notificationButton, { marginLeft: 8 }]}
-                    onPress={() => router.push('/notifications')}
-                  >
-                    <Bell size={20} color={colors.text} />
-                  </TouchableOpacity>
+                      <SearchIcon size={20} color={colors.text} />
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[styles.notificationButton, { marginLeft: 8 }]}
+                      onPress={() => router.push('/notifications')}
+                    >
+                      <Bell size={20} color={colors.text} />
+                    </TouchableOpacity>
+                  </View>
                 </View>
               </View>
+              <ScrollView showsVerticalScrollIndicator={false}>
+                {renderFeed()}
+              </ScrollView>
             </View>
-            <ScrollView showsVerticalScrollIndicator={false}>
-              {(feedTab === 'for-you' ? feed : followingFeed).map(post => (
-                <View key={post.id} style={styles.postCard}>
-                  <View style={styles.postHeader}>
-                    <Image source={{ uri: post.avatarUrl }} style={styles.avatar} />
-                    <View>
-                      <Text style={styles.username}>{post.username}</Text>
-                      <Text style={styles.time}>{post.timeAgo}</Text>
-                    </View>
-                  </View>
-                  {post.imageUrl && <Image source={{ uri: post.imageUrl }} style={styles.postImage} />}
-                  <Text style={styles.postText}>{post.content}</Text>
-                  <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 8 }}>
-                    <TouchableOpacity onPress={() => {
-                      setLikedPosts(prev => ({ ...prev, [post.id]: !prev[post.id] }));
-                      setLikeCounts(prev => {
-                        const current = prev[post.id] ?? post.likeCount ?? 0;
-                        return { ...prev, [post.id]: likedPosts[post.id] ? current - 1 : current + 1 };
-                      });
-                    }} style={{ flexDirection: 'row', alignItems: 'center', marginRight: 16 }}>
-                      <Heart size={20} color={likedPosts[post.id] ? '#EC4899' : colors.primary} fill={likedPosts[post.id] ? '#EC4899' : 'none'} style={{ marginRight: 6 }} />
-                      <Text style={{ color: colors.text }}>{likeCounts[post.id] ?? post.likeCount ?? 0}</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity onPress={() => setExpandedComments(prev => ({ ...prev, [post.id]: !prev[post.id] }))} style={{ flexDirection: 'row', alignItems: 'center' }}>
-                      <MessageCircle size={20} color={colors.primary} style={{ marginRight: 6 }} />
-                      <Text style={{ color: colors.text }}>{comments[post.id]?.length ?? post.commentCount ?? 0}</Text>
-                    </TouchableOpacity>
-                  </View>
-                  {expandedComments[post.id] && (
-                    <View style={{ marginTop: 10, backgroundColor: colors.cardAlt, borderRadius: 10, padding: 12 }}>
-                      {comments[post.id]?.map(c => (
-                        <Text key={c.id} style={{ color: colors.text, marginBottom: 6 }}><Text style={{ fontWeight: 'bold' }}>{c.username}:</Text> {c.text}</Text>
-                      ))}
-                      <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 8 }}>
-                        <TextInput
-                          style={{ flex: 1, backgroundColor: colors.card, borderRadius: 8, padding: 8, color: colors.text, borderWidth: 1, borderColor: colors.border }}
-                          placeholder="Add a comment..."
-                          placeholderTextColor={colors.textSecondary}
-                          value={commentInputs[post.id] ?? ''}
-                          onChangeText={text => setCommentInputs(prev => ({ ...prev, [post.id]: text }))}
-                        />
-                        <TouchableOpacity
-                          onPress={() => {
-                            if ((commentInputs[post.id] ?? '').trim()) {
-                              setComments(prev => ({
-                                ...prev,
-                                [post.id]: [
-                                  ...(prev[post.id] ?? []),
-                                  { id: Date.now(), username: 'you', text: commentInputs[post.id] }
-                                ]
-                              }));
-                              setCommentInputs(prev => ({ ...prev, [post.id]: '' }));
-                            }
-                          }}
-                          style={{ marginLeft: 8, backgroundColor: colors.primary, borderRadius: 8, paddingVertical: 8, paddingHorizontal: 14 }}
-                        >
-                          <Text style={{ color: colors.buttonText, fontWeight: 'bold' }}>Post</Text>
-                        </TouchableOpacity>
-                      </View>
-                    </View>
-                  )}
-                </View>
-              ))}
-            </ScrollView>
+          </View>
+          {showSearchBar && searchResults && (
+            <View
+              ref={dropdownRef}
+              style={{
+                position: 'absolute',
+                top: dropdownPos.top,
+                left: dropdownPos.left,
+                width: dropdownPos.width,
+                backgroundColor: colors.card,
+                borderColor: colors.border,
+                borderWidth: 1,
+                borderTopWidth: 0,
+                zIndex: 2000,
+                shadowColor: '#000',
+                shadowOffset: { width: 0, height: 8 },
+                shadowOpacity: 0.18,
+                shadowRadius: 24,
+                elevation: 10,
+                borderRadius: 12,
+                borderTopLeftRadius: 0,
+                borderTopRightRadius: 0,
+                maxHeight: 500,
+                padding: 12,
+                paddingTop: 0,
+                marginTop: -4,
+                overflow: 'visible',
+              }}
+            >
+              <View style={{ height: 1, backgroundColor: colors.border, opacity: 0.5, marginHorizontal: -12, marginBottom: 8 }} />
+              {renderSearchResults()}
+            </View>
+          )}
+        </View>
+      </SafeAreaView>
+
+      <Modal
+        visible={menuVisible}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setMenuVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.menuContent, { backgroundColor: colors.card }]}>
+            <TouchableOpacity 
+              style={styles.menuItem} 
+              onPress={handleArchivePost}
+            >
+              <Archive size={20} color={colors.text} />
+              <Text style={[styles.menuItemText, { color: colors.text }]}>Archive</Text>
+            </TouchableOpacity>
+            <TouchableOpacity 
+              style={styles.menuItem} 
+              onPress={handleDeletePost}
+            >
+              <Trash2 size={20} color="#EF4444" />
+              <Text style={[styles.menuItemText, { color: '#EF4444' }]}>Delete</Text>
+            </TouchableOpacity>
           </View>
         </View>
-        {/* Render dropdown at page level, absolutely positioned */}
-        {showSearchBar && searchResults && (
-          <View
-            ref={dropdownRef}
-            style={{
-              position: 'absolute',
-              top: dropdownPos.top,
-              left: dropdownPos.left,
-              width: dropdownPos.width,
-              backgroundColor: colors.card,
-              borderColor: colors.border,
-              borderWidth: 1,
-              borderTopWidth: 0,
-              zIndex: 2000,
-              shadowColor: '#000',
-              shadowOffset: { width: 0, height: 8 },
-              shadowOpacity: 0.18,
-              shadowRadius: 24,
-              elevation: 10,
-              borderRadius: 12,
-              borderTopLeftRadius: 0,
-              borderTopRightRadius: 0,
-              maxHeight: 500,
-              padding: 12,
-              paddingTop: 0,
-              marginTop: -4,
-              overflow: 'visible',
-            }}
-          >
-            {/* Subtle divider at the top of the dropdown */}
-            <View style={{ height: 1, backgroundColor: colors.border, opacity: 0.5, marginHorizontal: -12, marginBottom: 8 }} />
-            {renderSearchResults()}
-          </View>
-        )}
-      </View>
-    </SafeAreaView>
+      </Modal>
+    </>
   );
 }

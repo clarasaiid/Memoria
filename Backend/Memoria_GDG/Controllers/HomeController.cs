@@ -3,7 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 namespace Memoria_GDG.Controllers
 {
     [ApiController]
-    [Route("")]
+    [Route("api/[controller]")]
     public class HomeController : ControllerBase
     {
         [HttpGet]

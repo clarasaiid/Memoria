@@ -1,14 +1,53 @@
 import { View, Text, StyleSheet, TouchableOpacity, Switch, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useState } from 'react';
-import { ArrowLeft } from 'lucide-react-native';
-import { router } from 'expo-router';
+import { useState, useCallback } from 'react';
+import { ArrowLeft, Calendar, Archive, LogOut } from 'lucide-react-native';
+import { router, useFocusEffect } from 'expo-router';
 import { useTheme } from '../components/ThemeProvider';
 import { Ionicons } from '@expo/vector-icons';
+import { apiService } from './services/api'; // Make sure this path is correct
+
+// Add this type above your component
+type PrivateResponse = { isPrivate?: boolean; profile?: { isPrivate?: boolean } };
 
 export default function SettingsScreen() {
   const [privateAccount, setPrivateAccount] = useState(false);
   const { isDark, colors, toggleTheme } = useTheme();
+
+  // Fetch the real value from the backend every time the page is focused
+  useFocusEffect(
+    useCallback(() => {
+      const fetchPrivacy = async () => {
+        try {
+          const res = await apiService.get('/auth/me') as any;
+          setPrivateAccount(res.profile.isPrivate);
+        } catch (e) {
+          // handle error
+        }
+      };
+      fetchPrivacy();
+    }, [])
+  );
+
+  console.log("Fetched user data:", privateAccount);
+
+  // When toggled, update the backend and local state immediately, then re-fetch to ensure sync
+ const handleTogglePrivate = async () => {
+  try {
+    const newValue = !privateAccount;
+    const res = await apiService.put('/users/me/private', { isPrivate: newValue }) as PrivateResponse;
+    setPrivateAccount(
+      typeof res.isPrivate === "boolean"
+        ? res.isPrivate
+        : typeof res.profile?.isPrivate === "boolean"
+          ? res.profile.isPrivate
+          : newValue
+    );
+  } catch (e) {
+    console.error("Failed to update privacy:", e);
+  }
+};
+
 
   const handleChangePassword = () => {
     router.push('/change-password');
@@ -37,10 +76,7 @@ export default function SettingsScreen() {
           <TouchableOpacity style={styles.row} onPress={handleChangePassword}>
             <Text style={[styles.rowText, { color: colors.text }]}>Change Password</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.row} onPress={() => {
-            // TODO: Implement archive functionality
-            alert('Archive functionality coming soon!');
-          }}>
+          <TouchableOpacity style={styles.row} onPress={() => router.push('/archive')}>
             <Text style={[styles.rowText, { color: colors.text }]}>Archive</Text>
             <Ionicons name="archive-outline" size={24} color={colors.text} />
           </TouchableOpacity>
@@ -51,7 +87,9 @@ export default function SettingsScreen() {
         <View style={[styles.sectionBox, { backgroundColor: colors.cardAlt, borderColor: colors.border }]}>
           <View style={styles.row}>
             <Text style={[styles.rowText, { color: colors.text }]}>Private Account</Text>
-            <Switch value={privateAccount} onValueChange={setPrivateAccount}
+            <Switch
+              value={privateAccount}
+              onValueChange={handleTogglePrivate}
               trackColor={{ false: colors.border, true: colors.primary }}
               thumbColor={privateAccount ? colors.button : colors.card}
             />

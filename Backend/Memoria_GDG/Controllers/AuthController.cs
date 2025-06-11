@@ -13,7 +13,7 @@ using Microsoft.AspNetCore.Authorization;
 namespace Memoria_GDG.Controllers
 {
     [ApiController]
-    [Route("auth")]
+    [Route("api/[controller]")]
     public class AuthController : ControllerBase
     {
         private readonly UserManager<User> _userManager;
@@ -314,6 +314,14 @@ namespace Memoria_GDG.Controllers
         public async Task<IActionResult> CheckUsername([FromQuery] string username)
         {
             var user = await _userManager.FindByNameAsync(username);
+            return Ok(new { available = user == null });
+        }
+
+        // GET /auth/check-email?email=...
+        [HttpGet("check-email")]
+        public async Task<IActionResult> CheckEmail([FromQuery] string email)
+        {
+            var user = await _userManager.FindByEmailAsync(email);
             return Ok(new { available = user == null });
         }
 

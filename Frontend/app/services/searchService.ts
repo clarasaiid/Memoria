@@ -31,7 +31,7 @@ export interface GroupResult {
 
 class SearchService {
   async search(query: string): Promise<SearchResult> {
-    return apiService.get<SearchResult>(`/api/search?query=${encodeURIComponent(query)}`);
+    return apiService.get<SearchResult>(`/search?query=${encodeURIComponent(query)}`);
   }
 }
 

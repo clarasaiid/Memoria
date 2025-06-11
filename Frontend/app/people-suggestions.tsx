@@ -20,6 +20,7 @@ export default function PeopleSuggestionsPage() {
   const [suggestions, setSuggestions] = useState<SuggestedUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [pendingFollows, setPendingFollows] = useState<number[]>([]);
 
   const fetchSuggestions = async () => {
     try {
@@ -41,8 +42,12 @@ export default function PeopleSuggestionsPage() {
 
   const handleFollow = async (id: number) => {
     try {
-      await api.post(`/users/${id}/follow`);
-      setSuggestions(prev => prev.filter(p => p.id !== id));
+      const res = await api.post(`/users/${id}/follow`);
+      if (res.data.status === 'pending') {
+        setPendingFollows(prev => [...prev, id]);
+      } else {
+        setSuggestions(prev => prev.filter(p => p.id !== id));
+      }
     } catch (err) {
       console.error('Error following user:', err);
     }
@@ -134,8 +139,8 @@ export default function PeopleSuggestionsPage() {
                   {item.mutualFriendsCount} mutual {item.mutualFriendsCount === 1 ? 'friend' : 'friends'}
                 </Text>
               </View>
-              <TouchableOpacity style={styles.followBtn} onPress={() => handleFollow(item.id)}>
-                <Text style={styles.followBtnText}>Add Friend</Text>
+              <TouchableOpacity style={[styles.followBtn, pendingFollows.includes(item.id) ? { backgroundColor: colors.warning } : null]} onPress={() => handleFollow(item.id)}>
+                <Text style={styles.followBtnText}>{pendingFollows.includes(item.id) ? 'Requested' : 'Add Friend'}</Text>
               </TouchableOpacity>
             </View>
           )}

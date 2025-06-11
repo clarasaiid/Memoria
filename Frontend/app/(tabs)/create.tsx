@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Image, TextInput, Switch, Platform, Modal, FlatList } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Image, TextInput, Switch, Platform, Modal, FlatList, Alert } from 'react-native';
 import { ArrowLeft, Camera, Upload, Clock, Users, Lock, Globe, Scissors, SlidersHorizontal, Trash2, Check, Crop, RefreshCw, Edit3, Type } from 'lucide-react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import DateTimePicker from '@/components/DateTimePicker';
@@ -9,6 +9,8 @@ import * as ImagePicker from 'expo-image-picker';
 // @ts-ignore
 import Webcam from 'react-webcam';
 import { useTheme } from '../../components/ThemeProvider';
+import { apiService } from '../services/api';
+import { uploadImage } from '../services/imageUpload';
 
 // Mock friends data
 const mockFriends = [
@@ -53,8 +55,23 @@ export default function CreateScreen() {
   const [activeFilter, setActiveFilter] = useState<'none' | 'grayscale' | 'sepia' | 'brightness'>('none');
   const [editMode, setEditMode] = useState<'main' | 'filters' | 'crop' | 'draw'>('main');
   const [mirror, setMirror] = useState(false);
+  const [currentUser, setCurrentUser] = useState<any>(null);
+  const [isFocused, setIsFocused] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   
   const { colors } = useTheme();
+
+  useEffect(() => {
+    const fetchCurrentUser = async () => {
+      try {
+        const response = await apiService.get('/auth/me');
+        setCurrentUser(response.profile);
+      } catch (error) {
+        console.error('Error fetching current user:', error);
+      }
+    };
+    fetchCurrentUser();
+  }, []);
 
   const styles = StyleSheet.create({
     safeArea: {
@@ -499,6 +516,38 @@ export default function CreateScreen() {
     setEditingIndex(null);
   };
 
+  const handlePost = async () => {
+    if (images.length === 0) {
+      Alert.alert('Error', 'Please add at least one image');
+      return;
+    }
+
+    if (isSubmitting) return;
+    setIsSubmitting(true);
+
+    try {
+      // Upload the first image
+      const imageUrl = await uploadImage(images[0]);
+      
+      // Create the post
+      const response = await apiService.post<{ id: number }>('/posts', {
+        content: caption,
+        imageUrl: imageUrl,
+        isStory: false
+      });
+
+      if (response) {
+        // Navigate back to the feed
+        router.replace('/(tabs)');
+      }
+    } catch (error) {
+      console.error('Error creating post:', error);
+      Alert.alert('Error', 'Failed to create post. Please try again.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   return (
     <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }] }>
       <ScrollView style={styles.container}>
@@ -507,19 +556,25 @@ export default function CreateScreen() {
             <ArrowLeft size={24} color={colors.text} />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Create</Text>
-          <TouchableOpacity style={styles.postButton}>
-            <Text style={styles.postButtonText}>Post</Text>
+          <TouchableOpacity 
+            style={[styles.postButton, isSubmitting && { opacity: 0.5 }]} 
+            onPress={handlePost}
+            disabled={isSubmitting}
+          >
+            <Text style={styles.postButtonText}>{isSubmitting ? 'Posting...' : 'Post'}</Text>
           </TouchableOpacity>
         </View>
         
         <View style={styles.formContainer}>
           <TextInput
             style={styles.captionInput}
-            placeholder="What's on your mind, Clara?"
+            placeholder={isFocused ? "What's on your mind?" : `What's on your mind, ${currentUser?.firstName || 'there'}?`}
             placeholderTextColor={colors.textSecondary}
             multiline
             value={caption}
             onChangeText={setCaption}
+            onFocus={() => setIsFocused(true)}
+            onBlur={() => setIsFocused(false)}
           />
 
           {/* Show tagged friends */}

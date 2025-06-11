@@ -10,7 +10,7 @@ using System.Security.Claims;
 namespace Memoria_GDG.Controllers
 {
     [ApiController]
-    [Route("posts")]
+    [Route("api/[controller]")]
     public class PostsController : ControllerBase
     {
         private readonly AppDbContext _context;
@@ -30,7 +30,33 @@ namespace Memoria_GDG.Controllers
         [HttpGet]
         public async Task<ActionResult<IEnumerable<Post>>> GetPosts()
         {
-            return await _context.Posts.Include(p => p.User).ToListAsync();
+            var currentUserId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            var query = _context.Posts.Include(p => p.User).AsQueryable();
+
+            if (currentUserId != null)
+            {
+                var userId = int.Parse(currentUserId);
+                // Get posts from:
+                // 1. Public accounts
+                // 2. Own posts
+                // 3. Private accounts that the user follows (and follow request is accepted)
+                query = query.Where(p => 
+                    !p.User.IsPrivate || // Public accounts
+                    p.UserId == userId || // Own posts
+                    _context.Follows.Any(f => 
+                        f.FollowerId == userId && 
+                        f.FollowingId == p.UserId && 
+                        f.Status == FollowStatus.Accepted // Only show posts from private accounts that accepted the follow request
+                    )
+                );
+            }
+            else
+            {
+                // For non-authenticated users, only show posts from public accounts
+                query = query.Where(p => !p.User.IsPrivate);
+            }
+
+            return await query.ToListAsync();
         }
 
         // GET /posts/{id}
@@ -55,15 +81,15 @@ namespace Memoria_GDG.Controllers
         // GET /posts/archive
         [HttpGet("archive")]
         [Authorize]
-        public async Task<ActionResult<IEnumerable<Post>>> GetArchivedStories()
+        public async Task<ActionResult<IEnumerable<Post>>> GetArchivedPosts()
         {
             var userId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier));
-            var archivedStories = await _context.Posts
+            var archivedPosts = await _context.Posts
                 .Include(p => p.User)
-                .Where(p => p.IsStory && p.IsArchived && p.UserId == userId)
+                .Where(p => p.IsArchived && p.UserId == userId)
                 .OrderByDescending(p => p.CreatedAt)
                 .ToListAsync();
-            return archivedStories;
+            return archivedPosts;
         }
 
         // POST /posts
@@ -124,10 +150,24 @@ namespace Memoria_GDG.Controllers
         public async Task<IActionResult> ArchiveStory(int id)
         {
             var userId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier));
-            var post = await _context.Posts.FirstOrDefaultAsync(p => p.Id == id && p.UserId == userId && p.IsStory);
+            var post = await _context.Posts.FirstOrDefaultAsync(p => p.Id == id && p.UserId == userId);
             if (post == null) return NotFound();
 
             post.IsArchived = true;
+            await _context.SaveChangesAsync();
+            return NoContent();
+        }
+
+        // PUT /posts/unarchive/{id}
+        [HttpPut("unarchive/{id}")]
+        [Authorize]
+        public async Task<IActionResult> UnarchivePost(int id)
+        {
+            var userId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier));
+            var post = await _context.Posts.FirstOrDefaultAsync(p => p.Id == id && p.UserId == userId);
+            if (post == null) return NotFound();
+
+            post.IsArchived = false;
             await _context.SaveChangesAsync();
             return NoContent();
         }
