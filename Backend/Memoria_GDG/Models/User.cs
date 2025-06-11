@@ -13,6 +13,7 @@ namespace Memoria_GDG
         public string ProfilePictureUrl { get; set; }
         public string CoverPhotoUrl { get; set; } 
         public string Bio { get; set; }
+        public bool IsPrivate { get; set; }
 
         public ICollection<Post> Posts { get; set; } = new List<Post>();
         public ICollection<Comment> Comments { get; set; } = new List<Comment>();

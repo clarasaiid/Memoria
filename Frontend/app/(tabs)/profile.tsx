@@ -5,6 +5,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { apiService } from '../services/api';
 import { router, useRouter } from 'expo-router';
 import { useTheme } from '../../components/ThemeProvider';
+import { useFocusEffect } from '@react-navigation/native';
+import React from 'react';
 
 const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
 const COVER_HEIGHT = 220;
@@ -15,7 +17,7 @@ const fallbackCover = 'https://images.unsplash.com/photo-1506744038136-46273834b
 export default function ProfileScreen() {
   const { width } = useWindowDimensions();
   const [photoModal, setPhotoModal] = useState({ visible: false, uri: '' });
-  const [listModal, setListModal] = useState({ visible: false, type: '', data: [] });
+  const [listModal, setListModal] = useState<{ visible: boolean; type: string; data: any[] }>({ visible: false, type: '', data: [] });
   const [search, setSearch] = useState('');
   const [viewMode, setViewMode] = useState<'grid' | 'feed'>('grid');
   const { colors, isDark } = useTheme();
@@ -29,29 +31,36 @@ export default function ProfileScreen() {
   const [menuPostId, setMenuPostId] = useState<number | null>(null);
   const [menuVisible, setMenuVisible] = useState(false);
 
+  const fetchProfileAndPosts = async () => {
+    setLoading(true);
+    try {
+      const res = await apiService.get('/auth/me') as any;
+      setProfile(res.profile);
+
+      // Fetch posts for this user
+      const postsRes: any[] = await apiService.get('/posts');
+      const userPosts = postsRes.filter((p: any) => p.user?.id === res.profile.id && !p.isArchived);
+      setPosts(userPosts);
+
+      setFriends(res.friends || []);
+      setFollowers(res.followers || []);
+      setFollowing(res.following || []);
+    } catch (e) {
+      // handle error
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
-    const fetchProfileAndPosts = async () => {
-      setLoading(true);
-      try {
-        const res = await apiService.get('/auth/me') as any;
-        setProfile(res.profile);
-
-        // Fetch posts for this user
-        const postsRes = await apiService.get('/posts');
-        const userPosts = postsRes.filter((p: any) => p.user?.id === res.profile.id && !p.isArchived);
-        setPosts(userPosts);
-
-        setFriends(res.friends || []);
-        setFollowers(res.followers || []);
-        setFollowing(res.following || []);
-      } catch (e) {
-        // handle error
-      } finally {
-        setLoading(false);
-      }
-    };
     fetchProfileAndPosts();
   }, []);
+
+  useFocusEffect(
+    React.useCallback(() => {
+      fetchProfileAndPosts();
+    }, [])
+  );
 
   const getListData = () => {
     let data: any[] = [];
@@ -92,9 +101,10 @@ export default function ProfileScreen() {
   const handleArchivePost = async (postId: number) => {
     try {
       await apiService.put(`/posts/archive/${postId}`);
+      setPosts(posts.filter((p) => p.id !== postId));
       setMenuVisible(false);
       setMenuPostId(null);
-      router.push('/archive');
+      Alert.alert('Success', 'Post archived successfully');
     } catch (e) {
       Alert.alert('Error', 'Failed to archive post.');
     }
@@ -193,15 +203,26 @@ export default function ProfileScreen() {
                       shadowOpacity: 0.12,
                       shadowRadius: 8,
                       shadowOffset: { width: 0, height: 2 },
-                      elevation: 4,
                     }}
                   />
                 </TouchableOpacity>
                 <TouchableOpacity
-                  style={{ position: 'absolute', top: 10, right: 10, backgroundColor: colors.card, borderRadius: 16, padding: 4, zIndex: 10 }}
-                  onPress={() => { setMenuPostId(item.id); setMenuVisible(true); }}
+                  style={{
+                    position: 'absolute',
+                    top: 10,
+                    right: 10,
+                    backgroundColor: colors.card,
+                    borderRadius: 16,
+                    padding: 10,
+                    zIndex: 10,
+                  }}
+                  onPress={() => {
+                    console.log('Grid dots pressed', item.id);
+                    setMenuPostId(item.id);
+                    setMenuVisible(true);
+                  }}
                 >
-                  <MoreHorizontal size={20} color={colors.textSecondary} />
+                  <MoreHorizontal size={24} color={colors.textSecondary} />
                 </TouchableOpacity>
               </View>
             )}

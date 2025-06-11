@@ -110,16 +110,18 @@ export default function HomePage() {
     const fetchPosts = async () => {
       try {
         const response = await apiService.get('/posts');
-        const posts = response.map((post: any) => ({
-          id: post.id,
-          content: post.content,
-          imageUrl: post.imageUrl.startsWith('http') ? post.imageUrl : `http://localhost:7000${post.imageUrl}`,
-          username: post.user?.userName || post.user?.username || 'Unknown User',
-          avatarUrl: post.user?.profilePictureUrl || `https://ui-avatars.com/api/?name=${post.user?.userName || post.user?.username || 'Unknown'}`,
-          timeAgo: 'Just now',
-          likeCount: post.reactions?.length || 0,
-          commentCount: post.comments?.length || 0
-        }));
+        const posts = response
+          .filter((post: any) => !post.isArchived)
+          .map((post: any) => ({
+            id: post.id,
+            content: post.content,
+            imageUrl: post.imageUrl.startsWith('http') ? post.imageUrl : `http://localhost:7000${post.imageUrl}`,
+            username: post.user?.userName || post.user?.username || 'Unknown User',
+            avatarUrl: post.user?.profilePictureUrl || `https://ui-avatars.com/api/?name=${post.user?.userName || post.user?.username || 'Unknown'}`,
+            timeAgo: 'Just now',
+            likeCount: post.reactions?.length || 0,
+            commentCount: post.comments?.length || 0
+          }));
         setFeed(posts);
         setFollowingFeed(posts); // For now, show same posts in both feeds
       } catch (error) {

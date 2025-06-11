@@ -30,7 +30,33 @@ namespace Memoria_GDG.Controllers
         [HttpGet]
         public async Task<ActionResult<IEnumerable<Post>>> GetPosts()
         {
-            return await _context.Posts.Include(p => p.User).ToListAsync();
+            var currentUserId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            var query = _context.Posts.Include(p => p.User).AsQueryable();
+
+            if (currentUserId != null)
+            {
+                var userId = int.Parse(currentUserId);
+                // Get posts from:
+                // 1. Public accounts
+                // 2. Own posts
+                // 3. Private accounts that the user follows (and follow request is accepted)
+                query = query.Where(p => 
+                    !p.User.IsPrivate || // Public accounts
+                    p.UserId == userId || // Own posts
+                    _context.Follows.Any(f => 
+                        f.FollowerId == userId && 
+                        f.FollowingId == p.UserId && 
+                        f.Status == FollowStatus.Accepted // Only show posts from private accounts that accepted the follow request
+                    )
+                );
+            }
+            else
+            {
+                // For non-authenticated users, only show posts from public accounts
+                query = query.Where(p => !p.User.IsPrivate);
+            }
+
+            return await query.ToListAsync();
         }
 
         // GET /posts/{id}

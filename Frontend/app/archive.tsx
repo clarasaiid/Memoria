@@ -8,6 +8,7 @@ import {
   Image,
   SafeAreaView,
   Dimensions,
+  Alert,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useTheme } from '../components/ThemeProvider';
